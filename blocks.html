@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>直式積木大師</title>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', 'Microsoft JhengHei', sans-serif;
+            background-color: #FDF6E3; 
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            touch-action: none; 
+        }
+
+        .paper-texture {
+            background-color: #FFFDF8;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            border: 2px solid #EAE0C8;
+        }
+
+        .math-grid {
+            background-image: 
+                linear-gradient(to right, #E2E8F0 1px, transparent 1px),
+                linear-gradient(to bottom, #E2E8F0 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .dragging {
+            z-index: 50;
+            transform: scale(1.1);
+            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.2));
+            cursor: grabbing !important;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 10px #FFD700) brightness(1); }
+            50% { filter: drop-shadow(0 0 20px #FFD700) brightness(1.2); transform: scale(1.05); }
+        }
+        .glowing-group {
+            animation: pulseGlow 1.5s infinite;
+            cursor: grab;
+        }
+
+        @keyframes shatter {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2) rotate(5deg); opacity: 0.8; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        .shatter-anim {
+            animation: shatter 0.5s ease-out forwards;
+        }
+
+        .strike-through {
+            position: relative;
+        }
+        .strike-through::after {
+            content: '';
+            position: absolute;
+            left: -10%;
+            top: 50%;
+            width: 120%;
+            height: 6px;
+            background-color: #EF4444;
+            transform: rotate(-30deg);
+            border-radius: 3px;
+            animation: drawStrike 0.3s ease-out forwards;
+        }
+        @keyframes drawStrike {
+            from { width: 0; }
+            to { width: 120%; }
+        }
+
+        @keyframes bounceGacha {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-gacha {
+            animation: bounceGacha 0.5s ease-in-out infinite;
+        }
+
+        @keyframes gachaDrop {
+            0% { transform: translateY(-100vh) rotate(0deg) scale(0.5); }
+            60% { transform: translateY(20px) rotate(15deg) scale(1.1); }
+            80% { transform: translateY(-10px) rotate(-10deg) scale(0.95); }
+            100% { transform: translateY(0) rotate(0deg) scale(1); }
+        }
+        .gacha-drop { animation: gachaDrop 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+
+        @keyframes gachaShake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-15deg) scale(1.05); }
+            50% { transform: rotate(15deg) scale(1.05); }
+            75% { transform: rotate(-15deg) scale(1.05); }
+        }
+        .gacha-shake { animation: gachaShake 0.4s ease-in-out infinite; }
+
+        @keyframes itemReveal {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.5); opacity: 1; filter: drop-shadow(0 0 20px #FFD700); }
+            100% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 10px #FFD700); }
+        }
+        .item-reveal { animation: itemReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        @keyframes itemSadReveal {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; filter: grayscale(1) drop-shadow(0 0 0px transparent); }
+            100% { transform: scale(1) translateY(30px); opacity: 0.8; filter: grayscale(1) drop-shadow(0 0 0px transparent); }
+        }
+        .item-sad-reveal { animation: itemSadReveal 0.8s ease-out forwards; }
+
+        @keyframes spinRays {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin-rays { animation: spinRays 8s linear infinite; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const TenBlock = () => (
+            <svg viewBox="0 0 40 200" className="w-8 h-[160px] lg:w-10 lg:h-[200px] drop-shadow-md pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="2" width="36" height="196" rx="6" fill="#FF9F43" stroke="#E67E22" strokeWidth="4"/>
+                {Array.from({length: 9}).map((_, i) => (
+                    <line key={i} x1="2" y1={(i+1)*20} x2="38" y2={(i+1)*20} stroke="#E67E22" strokeWidth="3" opacity="0.6"/>
+                ))}
+                <rect x="6" y="6" width="8" height="188" rx="4" fill="white" opacity="0.3"/>
+            </svg>
+        );
+
+        const OneBlock = ({ isGlowing }) => (
+            <svg viewBox="0 0 40 40" className={`w-8 h-8 lg:w-10 lg:h-10 drop-shadow-md pointer-events-none ${isGlowing ? 'drop-shadow-[0_0_8px_#FCD34D]' : ''}`} xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="2" width="36" height="36" rx="6" fill="#2ED573" stroke="#27AE60" strokeWidth="4"/>
+                <rect x="6" y="6" width="8" height="8" rx="2" fill="white" opacity="0.4"/>
+            </svg>
+        );
+
+        const TokenCoin = () => (
+            <svg viewBox="0 0 40 40" className="w-8 h-8 drop-shadow-sm" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="18" fill="#FFD700" stroke="#F39C12" strokeWidth="3"/>
+                <circle cx="20" cy="20" r="12" fill="#F1C40F" stroke="#F39C12" strokeWidth="1"/>
+                <text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#D35400" fontSize="16" fontWeight="bold">★</text>
+            </svg>
+        );
+
+        const GachaCapsule = ({ className }) => (
+            <svg viewBox="0 0 100 100" className={`w-48 h-48 drop-shadow-[0_20px_20px_rgba(0,0,0,0.5)] ${className}`} xmlns="http://www.w3.org/2000/svg">
+                <path d="M 10 50 A 40 40 0 0 0 90 50 Z" fill="#F1F2F6" stroke="#2F3542" strokeWidth="2" />
+                <path d="M 10 50 A 40 40 0 0 1 90 50 Z" fill="#FF4757" stroke="#2F3542" strokeWidth="2" />
+                <rect x="5" y="46" width="90" height="8" rx="4" fill="#2F3542" />
+                <circle cx="50" cy="50" r="12" fill="#FFFFFF" stroke="#2F3542" strokeWidth="3" />
+                <path d="M 50 43 L 50 57" stroke="#2F3542" strokeWidth="3" strokeLinecap="round" />
+                <path d="M 20 25 Q 35 15 50 15" stroke="white" strokeWidth="5" strokeLinecap="round" fill="none" opacity="0.6"/>
+            </svg>
+        );
+
+        let audioCtx = null;
+        const initAudio = () => {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        };
+
+        const playSound = (type) => {
+            if (!audioCtx) return;
+            initAudio();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (type === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'magic') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(600, now + 0.1);
+                osc.frequency.setValueAtTime(800, now + 0.2);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'shatter') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2);
+                osc.frequency.setValueAtTime(1046.50, now + 0.3);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'error') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.setValueAtTime(150, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'tada') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(500, now + 0.2);
+                osc.frequency.setValueAtTime(600, now + 0.4);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 1);
+                osc.start(now);
+                osc.stop(now + 1);
+            } else if (type === 'sad') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(250, now + 0.3);
+                osc.frequency.setValueAtTime(250, now + 0.3);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.6);
+                osc.frequency.setValueAtTime(200, now + 0.6);
+                osc.frequency.exponentialRampToValueAtTime(150, now + 1.2);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 1.5);
+                osc.start(now);
+                osc.stop(now + 1.5);
+            }
+        };
+
+        const Draggable = ({ children, onDragEnd, onDragClick, type, disabled }) => {
+            const ref = useRef(null);
+            const dragState = useRef({ isDragging: false, startX: 0, startY: 0, hasMoved: false });
+
+            const handlePointerDown = (e) => {
+                if (disabled) return;
+                e.preventDefault();
+                initAudio(); 
+                playSound('pop'); 
+                e.currentTarget.setPointerCapture(e.pointerId);
+                dragState.current = { isDragging: true, startX: e.clientX, startY: e.clientY, hasMoved: false };
+                
+                if (ref.current) {
+                    ref.current.style.transition = 'none';
+                    ref.current.style.zIndex = '50';
+                    ref.current.style.transform = `scale(1.1)`;
+                    ref.current.style.filter = 'drop-shadow(0 15px 15px rgba(0,0,0,0.2))';
+                    ref.current.style.cursor = 'grabbing';
+                }
+            };
+
+            const handlePointerMove = (e) => {
+                if (!dragState.current.isDragging) return;
+                e.preventDefault(); 
+                const dx = e.clientX - dragState.current.startX;
+                const dy = e.clientY - dragState.current.startY;
+                
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    dragState.current.hasMoved = true;
+                }
+                
+                if (ref.current) {
+                    ref.current.style.transform = `translate(${dx}px, ${dy}px) scale(1.1)`;
+                }
+            };
+
+            const handlePointerUp = (e) => {
+                if (!dragState.current.isDragging) return;
+                dragState.current.isDragging = false;
+                e.currentTarget.releasePointerCapture(e.pointerId);
+                
+                if (ref.current) ref.current.style.pointerEvents = 'none';
+                const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+                
+                if (ref.current) {
+                    ref.current.style.pointerEvents = '';
+                    ref.current.style.transition = 'transform 0.3s ease';
+                    ref.current.style.transform = `translate(0px, 0px) scale(1)`;
+                    ref.current.style.zIndex = '';
+                    ref.current.style.filter = '';
+                    ref.current.style.cursor = 'grab';
+                }
+                
+                if (!dragState.current.hasMoved) {
+                    if (onDragClick) onDragClick();
+                } else {
+                    const isDroppedOnTens = dropTarget ? dropTarget.closest('#tens-column') !== null : false;
+                    const isDroppedOnOnes = dropTarget ? dropTarget.closest('#ones-column') !== null : false;
+                    onDragEnd({ type, isDroppedOnTens, isDroppedOnOnes, x: e.clientX, y: e.clientY });
+                }
+            };
+
+            return (
+                <div 
+                    ref={ref}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerUp}
+                    className="cursor-grab touch-none"
+                    style={{ touchAction: 'none' }}
+                >
+                    {children}
+                </div>
+            );
+        };
+
+        const generateLevel = (count) => {
+            let type, top, bottom, expected, msg;
+            let topTens, topOnes;
+
+            const stage = Math.floor(count / 3);
+            let qType = stage;
+            
+            if (stage >= 4) {
+                qType = Math.floor(Math.random() * 4); 
+            }
+
+            switch (qType) {
+                case 0:
+                    type = '+';
+                    topTens = Math.floor(Math.random() * 2) + 1;
+                    topOnes = Math.floor(Math.random() * 8);
+                    bottom = Math.floor(Math.random() * (9 - topOnes)) + 1;
+                    top = topTens * 10 + topOnes;
+                    expected = top + bottom;
+                    msg = "👇 🟩 ➔ ➕";
+                    break;
+                case 1:
+                    type = '-';
+                    topTens = Math.floor(Math.random() * 2) + 1;
+                    topOnes = Math.floor(Math.random() * 8) + 1;
+                    bottom = Math.floor(Math.random() * topOnes) + 1;
+                    top = topTens * 10 + topOnes;
+                    expected = top - bottom;
+                    msg = "👇 🟩 ➔ 🗑️";
+                    break;
+                case 2:
+                    type = '+';
+                    topTens = Math.floor(Math.random() * 2) + 1;
+                    topOnes = Math.floor(Math.random() * 8) + 2;
+                    let minB = 10 - topOnes;
+                    if (minB > 9) minB = 9;
+                    bottom = Math.floor(Math.random() * (9 - minB + 1)) + minB;
+                    top = topTens * 10 + topOnes;
+                    expected = top + bottom;
+                    msg = "10 🟩 ➔ 🟧";
+                    break;
+                case 3:
+                    type = '-';
+                    topTens = Math.floor(Math.random() * 2) + 1;
+                    topOnes = Math.floor(Math.random() * 8);
+                    bottom = Math.floor(Math.random() * (9 - topOnes)) + topOnes + 1;
+                    top = topTens * 10 + topOnes;
+                    expected = top - bottom;
+                    msg = "👇 🟧 ➔ 💥 ➔ 🟩";
+                    break;
+            }
+            return { type, top, bottom, expected, msg, stage };
+        };
+
+        const drawGacha = () => {
+            const rand = Math.random(); 
+            if (rand < 0.10) return { emoji: '🪙', label: '1元硬幣', isWin: true };
+            else if (rand < 0.15) return { emoji: '💰', label: '10元硬幣', isWin: true };
+            else if (rand < 0.20) return { emoji: '⏰', label: '+1 小時', isWin: true };
+            else return { emoji: '💨', label: '什麼都沒有...', isWin: false };
+        };
+
+        const App = () => {
+            const [questionCount, setQuestionCount] = useState(0);
+            const [level, setLevel] = useState(() => generateLevel(0));
+            
+            const [tens, setTens] = useState(0);
+            const [ones, setOnes] = useState(0);
+            const [supply, setSupply] = useState(0);
+            const [userAnswer, setUserAnswer] = useState('');
+            
+            const [isShattering, setIsShattering] = useState(false);
+            const [message, setMessage] = useState('');
+            const [gameState, setGameState] = useState('playing'); 
+            
+            const [tokens, setTokens] = useState(0);
+            const [collection, setCollection] = useState([]);
+            const [gachaModal, setGachaModal] = useState({ show: false, item: null, phase: 'idle' });
+
+            const autoNextTimer = useRef(null);
+
+            useEffect(() => {
+                if (!level) return;
+                setTens(Math.floor(level.top / 10));
+                setOnes(level.top % 10);
+                setSupply(level.bottom);
+                setUserAnswer('');
+                setGameState('playing');
+                setMessage(level.msg);
+            }, [level]);
+
+            // 計算初始狀態
+            const initialTens = Math.floor(level.top / 10);
+            const initialOnes = level.top % 10;
+            // 判斷當下是否發生了借位或進位動作
+            const borrowCount = Math.max(0, initialTens - tens);
+            const carryCount = Math.max(0, tens - initialTens);
+
+            const groupsOfTen = Math.floor(ones / 10);
+            const remainderOnes = ones % 10;
+            
+            const handleDragEnd = (dragData) => {
+                if (gameState !== 'playing') return;
+
+                if (dragData.type === 'ten_block' && dragData.isDroppedOnOnes && tens > 0) {
+                    playSound('shatter'); 
+                    setIsShattering(true);
+                    setTimeout(() => {
+                        setTens(t => t - 1);
+                        setOnes(o => o + 10);
+                        setIsShattering(false);
+                        setMessage('💥 🟧 ➔ 10 🟩');
+                    }, 200); 
+                }
+
+                if (dragData.type === 'glowing_ones' && dragData.isDroppedOnTens && ones >= 10) {
+                    playSound('magic'); 
+                    setTens(t => t + 1);
+                    setOnes(o => o - 10);
+                    setMessage('✨ 10 🟩 ➔ 1 🟧');
+                }
+            };
+
+            const addSupplyToOne = () => {
+                if (level.type === '+' && supply > 0) {
+                    playSound('pop'); 
+                    setSupply(s => s - 1);
+                    setOnes(o => o + 1);
+                }
+            };
+
+            const removeOneForSub = () => {
+                if (level.type === '-' && ones > 0 && supply > 0) {
+                    playSound('pop'); 
+                    setOnes(o => o - 1);
+                    setSupply(s => s - 1);
+                    if (supply - 1 === 0) {
+                        setMessage('❓ ⌨️');
+                    }
+                } else if (level.type === '-' && ones === 0 && supply > 0) {
+                    playSound('error'); 
+                    setMessage('👇 🟧 ➔ 💥 ➔ 🟩');
+                }
+            };
+
+            const nextLevel = () => {
+                if (autoNextTimer.current) clearTimeout(autoNextTimer.current);
+                playSound('pop');
+                setQuestionCount(prev => {
+                    const nextCount = prev + 1;
+                    setLevel(generateLevel(nextCount));
+                    return nextCount;
+                });
+            };
+
+            const checkAnswer = () => {
+                if (gameState !== 'playing') return;
+
+                if (ones >= 10) {
+                    playSound('error');
+                    setMessage('👆 ⬅️ 🟧 (請先打包滿10的積木)');
+                    return;
+                }
+
+                if (userAnswer.toString().trim() === '') {
+                    playSound('error'); 
+                    setMessage('👇 ⌨️ 🔢');
+                    return;
+                }
+
+                const parsedAnswer = parseInt(userAnswer, 10);
+
+                if (parsedAnswer === level.expected) {
+                    playSound('success'); 
+                    setGameState('success');
+                    setMessage('🎉 ✅ 🪙 +1');
+                    setTokens(t => t + 1);
+                    
+                    if (autoNextTimer.current) clearTimeout(autoNextTimer.current);
+                    autoNextTimer.current = setTimeout(() => {
+                        nextLevel();
+                    }, 1500);
+                } else {
+                    playSound('error'); 
+                    setMessage('🤔 ❌ ➔ 🟩🟧');
+                }
+            };
+
+            const playGacha = () => {
+                if (tokens >= 3 && !gachaModal.show) {
+                    playSound('pop');
+                    setTokens(t => t - 3);
+                    const drawnItem = drawGacha();
+                    
+                    setGachaModal({ show: true, item: drawnItem, phase: 'dropping' });
+                    
+                    setTimeout(() => {
+                        setGachaModal(prev => ({ ...prev, phase: 'shaking' }));
+                    }, 600);
+
+                    setTimeout(() => {
+                        if (drawnItem.isWin) playSound('tada');
+                        else playSound('sad');
+                        
+                        setGachaModal(prev => ({ ...prev, phase: 'revealing' }));
+                    }, 2100);
+                }
+            };
+
+            const collectGachaItem = () => {
+                playSound('pop');
+                if (gachaModal.item && gachaModal.item.isWin) {
+                    setCollection(prev => [...prev, gachaModal.item]);
+                    setMessage(`🎒 ➔ 🎁`);
+                } else {
+                    setMessage(`😢 再接再厲...`);
+                }
+                setGachaModal({ show: false, item: null, phase: 'idle' });
+            };
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (gachaModal.show) {
+                        if (e.key === 'Enter' && gachaModal.phase === 'revealing') {
+                            e.preventDefault();
+                            collectGachaItem(); 
+                        }
+                        return; 
+                    }
+
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (gameState === 'playing') checkAnswer(); 
+                        else if (gameState === 'success') nextLevel(); 
+                    } else if (gameState === 'playing' && document.activeElement.tagName !== 'INPUT') {
+                        if (/^[0-9]$/.test(e.key)) {
+                            setUserAnswer(prev => {
+                                const val = prev.toString() + e.key;
+                                return val.length > 3 ? val.slice(-3) : val; 
+                            });
+                        } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                            e.preventDefault(); 
+                            setUserAnswer(prev => prev.toString().slice(0, -1));
+                        }
+                    }
+                };
+
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [gachaModal, gameState, userAnswer, level, ones]); 
+            
+            return (
+                <div 
+                    onClick={initAudio} 
+                    onPointerDown={initAudio}
+                    className="flex-1 flex flex-col items-center py-4 px-2 lg:px-8 max-w-5xl mx-auto w-full"
+                >
+                    
+                    {/* 頂部資訊與扭蛋機 */}
+                    <div className="w-full flex justify-between items-center mb-4 bg-white/80 p-4 rounded-2xl shadow-sm border border-[#EAE0C8]">
+                        <h1 className="text-3xl lg:text-4xl font-black text-[#8B5A2B]">🧮 🧱 <span className="text-xl text-gray-400 ml-2">#{questionCount + 1}</span></h1>
+                        
+                        <div className="flex items-center space-x-6">
+                            <div className="flex flex-col items-end">
+                                <div className="flex items-center space-x-2 text-xl font-bold text-[#D35400]">
+                                    <div className="flex">{Array.from({length: tokens}).map((_, i) => <TokenCoin key={i}/>)}</div>
+                                </div>
+                                <div className="text-sm text-gray-500 font-bold">3 🪙 = 1 🎁</div>
+                            </div>
+                            
+                            <button 
+                                onClick={playGacha}
+                                disabled={tokens < 3}
+                                className={`px-6 py-3 rounded-full font-black text-white text-2xl transition-all ${tokens >= 3 ? 'bg-[#FF4757] hover:bg-[#FF6B81] shadow-[0_6px_0_#C0392B] active:translate-y-1 active:shadow-[0_0px_0_#C0392B] animate-gacha' : 'bg-gray-300'}`}
+                            >
+                                🎁 GO!
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* 提示對話框 */}
+                    <div className="w-full bg-[#FFEAA7] text-[#D35400] text-3xl font-bold py-3 px-6 rounded-xl mb-4 border-2 border-[#FDCB6E] text-center shadow-md tracking-widest">
+                        {message}
+                    </div>
+
+                    {/* 核心雙欄遊戲區 */}
+                    <div className="flex-1 w-full flex flex-col lg:flex-row gap-6 pb-6">
+                        
+                        {/* 左欄：抽象數字區 (直式) - 修正：維持原題，只顯示進退位記號 */}
+                        <div className="flex-1 paper-texture rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden">
+                            <div className="absolute inset-0 math-grid opacity-50"></div>
+                            
+                            <div className="relative z-10 font-black text-[#2D3436] text-[5.5rem] lg:text-[6.5rem] leading-none flex flex-col items-end mr-4 lg:mr-8 mt-10">
+                                
+                                {/* 第一列數字 (被加數/被減數) */}
+                                <div className="flex space-x-8 lg:space-x-12">
+                                    {/* 十位數 */}
+                                    <div className="relative flex flex-col items-center">
+                                        {/* 進位記號：顯示紅色的 +1 */}
+                                        {carryCount > 0 && <span className="absolute -top-10 lg:-top-12 text-red-500 font-bold text-3xl lg:text-4xl drop-shadow-md">+{carryCount}</span>}
+                                        {/* 借位記號：顯示退位後剩下的十位數數字 */}
+                                        {borrowCount > 0 && <span className="absolute -top-10 lg:-top-12 text-red-500 font-bold text-3xl lg:text-4xl drop-shadow-md">{tens}</span>}
+                                        
+                                        {/* 十位數原題 (如果有借位，就畫斜線) */}
+                                        <span className={`${borrowCount > 0 ? 'strike-through text-gray-300' : ''}`}>
+                                            {initialTens || '\u00A0'}
+                                        </span>
+                                    </div>
+
+                                    {/* 個位數 */}
+                                    <div className="relative flex flex-col items-center">
+                                        {/* 借位記號：在個位數上方顯示小紅色的 10 */}
+                                        {borrowCount > 0 && (
+                                            <span className="absolute -top-10 lg:-top-12 text-red-500 font-bold text-3xl lg:text-4xl drop-shadow-md">10</span>
+                                        )}
+                                        {/* 個位數原題 (永遠維持原樣不畫斜線，因為它是題目本身) */}
+                                        <span>{initialOnes}</span>
+                                    </div>
+                                </div>
+                                
+                                {/* 第二列數字 (加數/減數) */}
+                                <div className="flex space-x-8 lg:space-x-12 relative w-full justify-end mt-6 lg:mt-8">
+                                    <span className="absolute -left-12 lg:-left-16 top-0 text-[#0984E3]">{level.type}</span>
+                                    
+                                    <div className="relative flex flex-col items-center opacity-0 pointer-events-none">
+                                        <span>0</span>
+                                    </div>
+                                    
+                                    {/* 加數/減數 (永遠維持原題不畫線) */}
+                                    <div className="relative flex flex-col items-center">
+                                        <span>{level.bottom}</span>
+                                    </div>
+                                </div>
+                                
+                                {/* 分隔線 */}
+                                <div className="w-[120%] h-2 lg:h-3 bg-[#2D3436] my-6 rounded-full -ml-[10%]"></div>
+                                
+                                {/* 答案輸入區 */}
+                                <div className="flex w-full justify-end text-[#00B894] pr-2 mt-2">
+                                    {gameState === 'success' ? (
+                                        <div className="flex space-x-8 lg:space-x-12 pr-2">
+                                            <span>{Math.floor(level.expected / 10) || '\u00A0'}</span>
+                                            <span>{level.expected % 10}</span>
+                                        </div>
+                                    ) : (
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            value={userAnswer}
+                                            onChange={(e) => setUserAnswer(e.target.value)}
+                                            className="w-40 h-24 text-[5rem] text-center font-black border-4 border-dashed border-[#B2BEC3] rounded-2xl focus:outline-none focus:border-[#0984E3] focus:bg-[#E8F8F5] text-[#2D3436] bg-transparent transition-colors shadow-inner"
+                                            placeholder="?"
+                                            min="0"
+                                            max="99"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 右欄：具象操作區 (積木) */}
+                        <div className="flex-[1.5] paper-texture rounded-3xl p-6 flex shadow-inner relative border-4 border-gray-100">
+                            
+                            {/* 中間分隔虛線 */}
+                            <div className="absolute left-1/2 top-4 bottom-4 w-1 border-l-4 border-dashed border-gray-300 z-0"></div>
+
+                            {/* 十位區 (左) */}
+                            <div id="tens-column" className="flex-1 flex flex-col items-center relative z-10 border-r border-transparent">
+                                <h2 className="flex items-center text-3xl font-black text-[#E67E22] mb-6 bg-white px-6 py-2 rounded-full shadow-sm"><span className="text-4xl mr-2">🟧</span> 10</h2>
+                                <div className="flex flex-row justify-center gap-2 lg:gap-4 w-full h-full pt-4">
+                                    {Array.from({length: tens}).map((_, i) => (
+                                        <div key={`ten-${i}`} className={isShattering && i === 0 ? 'shatter-anim' : ''}>
+                                            <Draggable type="ten_block" disabled={gameState !== 'playing'} onDragEnd={handleDragEnd}>
+                                                <TenBlock />
+                                            </Draggable>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 個位區 (右) */}
+                            <div id="ones-column" className="flex-1 flex flex-col items-center relative z-10">
+                                <h2 className="flex items-center text-3xl font-black text-[#27AE60] mb-6 bg-white px-6 py-2 rounded-full shadow-sm"><span className="text-4xl mr-2">🟩</span> 1</h2>
+                                <div className="flex flex-wrap justify-center gap-2 lg:gap-3 w-full h-full content-start pt-4 px-2">
+                                    
+                                    {/* 正常的小積木 (不滿10的餘數) */}
+                                    {Array.from({length: remainderOnes}).map((_, i) => (
+                                        <div key={`one-${i}`} onClick={removeOneForSub} className={`cursor-pointer ${level.type === '-' && supply > 0 ? 'hover:scale-110 transition-transform' : ''}`}>
+                                            <OneBlock />
+                                        </div>
+                                    ))}
+
+                                    {/* 群組的積木 (自動以10為單位打包) */}
+                                    {/* 增加 onDragClick 屬性，讓群組在被輕點時也能觸發刪減 */}
+                                    {Array.from({length: groupsOfTen}).map((_, gIdx) => (
+                                        <Draggable key={`group-${gIdx}`} type="glowing_ones" disabled={gameState !== 'playing'} onDragEnd={handleDragEnd} onDragClick={removeOneForSub}>
+                                            <div className={`glowing-group bg-[#FFF9C4] p-3 rounded-2xl border-2 border-[#FFD700] flex flex-wrap justify-center gap-1 w-36 relative ${level.type === '-' && supply > 0 ? 'hover:scale-105 transition-transform cursor-pointer' : ''}`}>
+                                                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-[#FF4757] text-white text-xl font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-md z-10 pointer-events-none">👆 ⬅️ 🟧</div>
+                                                {Array.from({length: 10}).map((_, i) => (
+                                                    <div key={`glow-${gIdx}-${i}`} className="scale-75 -m-1 relative z-0">
+                                                        <OneBlock isGlowing={true} />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </Draggable>
+                                    ))}
+
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {/* 底部供給 / 操作區 */}
+                    <div className="w-full flex justify-between items-center bg-white p-4 rounded-3xl shadow-md border-2 border-gray-100">
+                        
+                        {/* 左下：扭蛋收藏櫃 */}
+                        <div className="flex items-center space-x-2 overflow-visible w-1/3 bg-gray-50 rounded-xl p-2 h-16 border border-gray-200">
+                            <span className="text-2xl mr-2 shrink-0">🎒</span>
+                            <div className="flex space-x-3 text-2xl overflow-x-auto pb-1 relative w-full">
+                                {collection.map((item, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        className="hover:scale-125 transition-transform relative"
+                                    >
+                                        <span className="animate-bounce inline-block">{item.emoji}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 中下：加法補給區 或 減法目標區 */}
+                        <div className="flex-1 flex justify-center items-center">
+                            {level.type === '+' ? (
+                                <div className="flex items-center bg-[#E8F8F5] px-6 py-2 rounded-2xl border-2 border-[#A3E4D7]">
+                                    <span className="text-3xl mr-4 animate-bounce">👇 ➕</span>
+                                    <div className="flex space-x-2 items-center">
+                                        {Array.from({length: supply}).map((_, i) => (
+                                            <div key={`supply-${i}`} onClick={addSupplyToOne} className="cursor-pointer hover:scale-110 active:scale-95 transition-transform">
+                                                <OneBlock />
+                                            </div>
+                                        ))}
+                                        {supply === 0 && <span className="text-3xl">✅</span>}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center bg-[#FDEDEC] px-6 py-2 rounded-2xl border-2 border-[#F5B7B1]">
+                                    <span className="text-3xl mr-4">🗑️ ➖</span>
+                                    <span className="text-4xl font-black text-red-500">{supply}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 右下：送出按鈕 */}
+                        <div className="w-1/3 flex justify-end">
+                            {gameState === 'playing' ? (
+                                <button 
+                                    onClick={checkAnswer}
+                                    className="px-8 py-4 bg-[#0984E3] hover:bg-[#74B9FF] text-white text-3xl font-black rounded-2xl shadow-[0_6px_0_#00000030] active:translate-y-1 active:shadow-[0_0px_0_#000000] transition-all"
+                                >
+                                    ✅
+                                </button>
+                            ) : (
+                                <div className="px-8 py-4 bg-gray-200 text-gray-400 text-3xl font-black rounded-2xl shadow-inner flex items-center justify-center animate-pulse">
+                                    ⏳
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* --- 扭蛋抽獎全螢幕蓋板 --- */}
+                    {gachaModal.show && (
+                        <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm touch-none">
+                            
+                            {(gachaModal.phase === 'dropping' || gachaModal.phase === 'shaking') && (
+                                <div className="flex flex-col items-center">
+                                    <GachaCapsule className={gachaModal.phase === 'dropping' ? 'gacha-drop' : 'gacha-shake'} />
+                                    {gachaModal.phase === 'shaking' && (
+                                        <div className="mt-8 text-[4rem] animate-bounce">⏳</div>
+                                    )}
+                                </div>
+                            )}
+
+                            {gachaModal.phase === 'revealing' && (
+                                <div className="flex flex-col items-center relative w-full h-full justify-center">
+                                    
+                                    {gachaModal.item.isWin ? (
+                                        <>
+                                            <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none opacity-40">
+                                                <div className="w-[150vw] h-[150vw] spin-rays" 
+                                                     style={{ background: 'conic-gradient(from 0deg, transparent 0deg 15deg, #FFD700 15deg 30deg, transparent 30deg 45deg, #FFD700 45deg 60deg, transparent 60deg 75deg, #FFD700 75deg 90deg, transparent 90deg 105deg, #FFD700 105deg 120deg, transparent 120deg 135deg, #FFD700 135deg 150deg, transparent 150deg 165deg, #FFD700 165deg 180deg, transparent 180deg 195deg, #FFD700 195deg 210deg, transparent 210deg 225deg, #FFD700 225deg 240deg, transparent 240deg 255deg, #FFD700 255deg 270deg, transparent 270deg 285deg, #FFD700 285deg 300deg, transparent 300deg 315deg, #FFD700 315deg 330deg, transparent 330deg 345deg, #FFD700 345deg 360deg)' }}>
+                                                </div>
+                                            </div>
+                                            <div className="relative z-10 text-center item-reveal">
+                                                <div className="text-[10rem]">{gachaModal.item.emoji}</div>
+                                                <div className="text-4xl font-black text-[#FFD700] drop-shadow-md bg-black/40 px-8 py-3 rounded-full mt-4">
+                                                    {gachaModal.item.label}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="absolute inset-0 bg-blue-900/30 pointer-events-none"></div>
+                                            <div className="relative z-10 text-center item-sad-reveal flex flex-col items-center">
+                                                <div className="text-[10rem] grayscale opacity-80">{gachaModal.item.emoji}</div>
+                                                <div className="text-3xl font-black text-gray-300 drop-shadow-md bg-black/60 px-8 py-3 rounded-full mt-4">
+                                                    {gachaModal.item.label}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    <button 
+                                        onClick={collectGachaItem}
+                                        className={`relative z-10 mt-16 px-12 py-6 text-white text-[3rem] font-black rounded-full transition-all animate-bounce ${gachaModal.item.isWin ? 'bg-[#2ED573] hover:bg-[#26DE81] shadow-[0_10px_0_#218C53] active:translate-y-2 active:shadow-[0_0px_0_#218C53]' : 'bg-[#747D8C] hover:bg-[#A4B0BE] shadow-[0_10px_0_#57606F] active:translate-y-2 active:shadow-[0_0px_0_#57606F]'}`}
+                                    >
+                                        {gachaModal.item.isWin ? '📥 🎒' : '🆗 😢'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

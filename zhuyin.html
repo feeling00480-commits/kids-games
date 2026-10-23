@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>注音大冒險 v68.0 (完整拼音修復版)</title>
+    <style>
+        :root {
+            --primary: #FF9F43; --secondary: #54a0ff; --success: #1dd1a1;
+            --purple: #5f27cd; --pink: #ff9ff3; --bg: #feca57; --danger: #ff4757;
+            --neon-blue: #00f3ff; --neon-pink: #ff00ff; --neon-purple: #bc13fe; --dark-bg: #050510;
+            --gold: #ffd700;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { 
+            margin: 0; padding: 0; background-color: var(--bg); 
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif; 
+            overflow: hidden; touch-action: none; 
+            display: flex; flex-direction: column; align-items: center; height: 100vh; 
+        }
+
+        /* --- 基礎 UI --- */
+        .zy-wrap { display: inline-flex; align-items: center; margin: 0 2px; vertical-align: middle; position: relative; }
+        .zy-char { line-height: 1; }
+        .zy-phonetic { display: inline-flex; flex-direction: row; align-items: center; margin-left: 2px; position: relative; }
+        .zy-column { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; line-height: 1.0; }
+        .zy-symbol { font-size: 0.35em; color: #555; font-weight: normal; display: block; height: 1.1em; }
+        .zy-tone { font-size: 0.35em; color: #555; line-height: 1; font-weight: normal; margin-left: 1px; display: block; }
+        .zy-tone.light { position: absolute; top: -0.5em; left: 50%; transform: translateX(-50%); margin-left: 0; font-size: 0.4em; }
+
+        h1 { 
+            color: #ee5253; font-size: 3.5rem; text-shadow: 3px 3px 0 #fff; 
+            margin: 15px 0 10px 0; text-align: center; width: 100%; z-index: 20;
+            display: flex; justify-content: center; flex-wrap: wrap; line-height: 1.2;
+        }
+        
+        .back-btn { 
+            position: absolute; top: 15px; left: 15px; 
+            background: #ff6b6b; color: white; border: none; 
+            padding: 10px 20px; border-radius: 12px; 
+            font-size: 1.1rem; font-weight: bold; cursor: pointer; z-index: 250; 
+            box-shadow: 0 4px 0 #d63031;
+        }
+        .back-btn:active { transform: translateY(4px); box-shadow: 0 0 0; }
+
+        /* 暫停按鈕樣式 */
+        .pause-btn {
+            position: absolute; top: 15px; left: 15px;
+            background: #f1c40f; color: #fff; border: none;
+            padding: 10px 25px; border-radius: 12px;
+            font-size: 1.3rem; font-weight: bold; cursor: pointer; z-index: 250;
+            box-shadow: 0 4px 0 #e67e22;
+        }
+        .pause-btn:active { transform: translateY(4px); box-shadow: 0 0 0; }
+
+        /* 通用控制按鈕 */
+        .control-btn { 
+            padding: 12px 40px; border-radius: 50px; border: none; 
+            font-size: 1.6rem; font-weight: bold; cursor: pointer; 
+            color: white; display: inline-flex; justify-content: center; align-items: center;
+            margin: 10px 0; transition: all 0.1s;
+        }
+        .btn-clear { background: #ff6b6b; box-shadow: 0 6px 0 #d63031; }
+        .btn-clear:active { transform: translateY(6px); box-shadow: 0 0 0 #d63031; }
+
+        #menu-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; width: 100%; background: var(--bg); z-index: 100; }
+        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 96%; max-width: 600px; }
+        .menu-btn { 
+            background: #fff; border: 6px solid #ccc; border-radius: 30px; padding: 10px; 
+            cursor: pointer; box-shadow: 0 8px 0 rgba(0,0,0,0.1); 
+            text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 180px; transition: transform 0.1s;
+        }
+        .menu-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,0.1); }
+        .menu-icon { font-size: 4.5rem; margin-bottom: 5px; line-height: 1; }
+        .menu-text { font-size: 1.5rem; font-weight: bold; color: #333; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; line-height: 1.5; }
+        .en-text { margin-right: 5px; font-family: 'Segoe UI', sans-serif; position: relative; top: 2px; }
+
+        .btn-game { border-color: var(--secondary); } .btn-game .menu-text { color: var(--secondary); }
+        .btn-game-lv3 { border-color: var(--pink); } .btn-game-lv3 .menu-text { color: #ff6b81; }
+        .btn-practice { border-color: var(--success); } .btn-practice .menu-text { color: var(--success); }
+        .btn-pinyin { border-color: var(--purple); } .btn-pinyin .menu-text { color: var(--purple); }
+        .btn-battle { border-color: var(--danger); } .btn-battle .menu-text { color: var(--danger); }
+        .btn-fps { border-color: var(--neon-blue); background: #e0ffff; } .btn-fps .menu-text { color: #000; }
+
+        #instruction-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 3000; justify-content: center; align-items: center; animation: fadeIn 0.3s; }
+        .instruction-content { background: #fff; border-radius: 30px; width: 90%; max-width: 500px; padding: 30px; text-align: center; position: relative; box-shadow: 0 0 30px rgba(255,255,255,0.3); border: 5px solid var(--secondary); }
+        .inst-title { font-size: 2rem; color: var(--secondary); font-weight: bold; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
+        .inst-text { font-size: 1.4rem; color: #444; line-height: 1.8; text-align: left; margin-bottom: 30px; display: block; }
+        .inst-btn { background: var(--success); color: white; border: none; padding: 15px 50px; font-size: 1.8rem; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 0 #16a085; font-weight: bold; transition: transform 0.1s; display: inline-flex; align-items: center; }
+        .inst-btn:active { transform: translateY(4px); box-shadow: none; }
+        .close-inst { position: absolute; top: 10px; right: 15px; font-size: 2rem; cursor: pointer; color: #aaa; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 30px; text-align: center; width: 90%; max-width: 500px; animation: popIn 0.5s; display: flex; flex-direction: column; align-items: center;}
+        
+        .mode-select { display: flex; gap: 40px; margin-top: 30px; flex-direction: column; width: 100%; }
+        
+        /* FPS Styles */
+        #fps-screen { display: none; width: 100%; height: 100%; background: radial-gradient(circle at center, #1a1a2e 0%, #000000 100%); position: absolute; top: 0; left: 0; overflow: hidden; perspective: 800px; cursor: crosshair; z-index: 200; }
+        #fps-world { width: 100%; height: 100%; position: absolute; transform-style: preserve-3d; transform: translateZ(0); pointer-events: none; transition: transform 0.1s; }
+        .fps-floor { position: absolute; width: 4000px; height: 4000px; background: linear-gradient(rgba(0, 243, 255, 0.2) 2px, transparent 2px), linear-gradient(90deg, rgba(0, 243, 255, 0.2) 2px, transparent 2px); background-size: 150px 150px; background-color: transparent; transform: rotateX(90deg) translateZ(-400px) translateX(-50%); left: 50%; top: 50%; box-shadow: 0 0 100px rgba(0, 243, 255, 0.2); mask-image: radial-gradient(circle at 50% 50%, black 10%, transparent 60%); -webkit-mask-image: radial-gradient(circle at 50% 50%, black 10%, transparent 60%); }
+        .fps-enemy { position: absolute; width: 220px; height: 220px; transform-style: preserve-3d; left: 50%; top: 50%; pointer-events: auto; touch-action: none; }
+        .fps-enemy::after { content: ''; position: absolute; top: -20%; left: -20%; width: 140%; height: 140%; transform: translateZ(50px); cursor: pointer; }
+        .fps-face { position: absolute; width: 220px; height: 220px; border: 5px solid rgba(255, 255, 255, 0.9); border-radius: 30px; display: flex; justify-content: center; align-items: center; font-size: 9rem; font-weight: bold; background: rgba(44, 62, 80, 0.85); color: #fff; text-shadow: 0 0 20px var(--neon-blue); box-shadow: 0 0 50px var(--neon-blue); backface-visibility: hidden; pointer-events: none; }
+        .fps-enemy.trap .fps-face { border-color: #ff0000; background: rgba(50, 0, 0, 0.9); color: #ff3333; box-shadow: 0 0 30px red; text-shadow: 0 0 20px red; }
+
+        .fps-boss-container { position: absolute; transform-style: preserve-3d; left: 50%; top: 50%; pointer-events: none; }
+        .fps-shield-container { position: absolute; width: 0; height: 0; top: 0; left: 0; transform-style: preserve-3d; }
+        .fps-boss-core { position: absolute; width: 500px; height: 500px; border-radius: 80px; display: flex; justify-content: center; align-items: center; font-size: 20rem; color: #fff; transform: translate(-50%, -50%); backface-visibility: hidden; pointer-events: auto; transition: all 0.3s; }
+        .fps-boss-core.shielded { background: radial-gradient(circle, #001133, #000); border: 10px solid #00aaff; box-shadow: 0 0 50px #00aaff; color: #00aaff; text-shadow: 0 0 20px #00aaff; }
+        .fps-boss-core.vulnerable { background: radial-gradient(circle, #440000, #110000); border: 10px solid #ff0000; box-shadow: 0 0 80px #ff0000; color: #ff0000; text-shadow: 0 0 40px red; animation: boss-pulse 0.5s infinite alternate; cursor: pointer; }
+        @keyframes boss-pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.05); } }
+        
+        .fps-satellite { position: absolute; width: 120px; height: 120px; border-radius: 20px; display: flex; justify-content: center; align-items: center; font-size: 5rem; font-weight: bold; color: white; transform-origin: center center; pointer-events: auto; cursor: pointer; backface-visibility: hidden; box-shadow: 0 0 25px rgba(0,0,0,0.7); transition: filter 0.1s; }
+        .fps-satellite.normal { background: rgba(0, 100, 255, 0.9); border: 4px solid #00ffff; }
+        .fps-satellite.elite { background: rgba(255, 0, 0, 0.9); border: 4px solid #ffaaaa; }
+        .fps-satellite.trap { background: rgba(180, 0, 255, 0.9); border: 4px solid #ff00ff; }
+        .fps-satellite.hurt { filter: brightness(2) sepia(1); transform: scale(0.9); }
+        
+        .fps-target { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); padding: 5px 30px; border-radius: 30px; font-size: 2.2rem; font-weight: bold; color: var(--neon-pink); border: 2px solid var(--neon-pink); z-index: 250; box-shadow: 0 0 20px var(--neon-pink); text-shadow: 2px 2px 0 #000; white-space: nowrap; display: flex; align-items: center; }
+        .fps-hud { position: absolute; top: 15px; right: 15px; background: rgba(15, 12, 41, 0.9); border: 2px solid var(--neon-blue); color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 1.5rem; font-weight: bold; z-index: 150; box-shadow: 0 0 15px rgba(0, 243, 255, 0.3); }
+        
+        /* Optimized Status Bar */
+        #fps-bottom-panel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 700px; display: flex; justify-content: center; align-items: flex-end; z-index: 150; pointer-events: none; }
+        #fps-bars-container { display: flex; gap: 10px; width: 100%; max-width: 500px; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 20px; border: 2px solid #444; pointer-events: auto; }
+        .status-bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; }
+        .status-label { font-size: 1rem; color: #fff; font-weight: bold; margin-bottom: 3px; text-shadow: 1px 1px 2px #000; }
+        .bar-track { width: 100%; height: 20px; background: #222; border: 2px solid #fff; border-radius: 10px; overflow: hidden; position: relative; }
+        #fps-sp-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #0984e3, #00f3ff); transition: width 0.3s; }
+        #fps-sp-fill.awakening { background: linear-gradient(90deg, #ffd700, #fff); animation: pulseBar 0.5s infinite; }
+        #fps-hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #e84118, #4cd137); transition: width 0.3s; }
+        #fps-hp-text { position: absolute; top:0; left:0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 0.9rem; text-shadow: 1px 1px 2px black; pointer-events: none; }
+        @keyframes pulseBar { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* Awakening Button */
+        #fps-awake-btn { position: fixed; bottom: 20px; left: 20px; width: 90px; height: 90px; border-radius: 50%; background: radial-gradient(circle, #555, #222); border: 4px solid #777; color: #aaa; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; font-weight: bold; cursor: not-allowed; z-index: 160; pointer-events: auto; transition: all 0.3s; box-shadow: 0 5px 15px rgba(0,0,0,0.5); user-select: none; }
+        #fps-awake-btn::after { content: 'SPACE'; position: absolute; bottom: 10px; font-size: 0.7rem; opacity: 0.5; }
+        #fps-awake-btn.ready { background: radial-gradient(circle, #f1c40f, #e67e22); border-color: #fff; color: #fff; box-shadow: 0 0 20px #f1c40f, 0 0 40px #e67e22; cursor: pointer; animation: pulseBtn 0.8s infinite alternate; }
+        #fps-awake-btn.active { transform: scale(0.9); filter: brightness(1.2); }
+        @keyframes pulseBtn { from {transform: scale(1);} to {transform: scale(1.1);} }
+
+        /* Warp Lines - iOS Ultimate Fix */
+        #warp-container { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            overflow: hidden; 
+            pointer-events: none; 
+            z-index: 50;
+            -webkit-transform: translate3d(0,0,0);
+            transform: translate3d(0,0,0);
+        }
+        .warp-line { 
+            position: absolute; top: 50%; left: 50%; 
+            width: 4px;
+            height: 200px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, #ffffff 50%, rgba(255,255,255,0) 100%);
+            transform-origin: top center; 
+            opacity: 0; 
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            will-change: transform, opacity; 
+        }
+        @keyframes warpMove { 
+            0% { opacity: 0; transform: rotate(var(--angle)) translateY(0) scaleY(0.2); } 
+            20% { opacity: 0.9; } 
+            100% { opacity: 0; transform: rotate(var(--angle)) translateY(500px) scaleY(3); } 
+        }
+        /* Boss HUD */
+        #boss-hud { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); width: 350px; display: none; flex-direction: column; align-items: center; z-index: 160; }
+        #boss-warning { color: #ff3333; font-size: 1.5rem; font-weight: bold; text-shadow: 0 0 10px red; margin-bottom: 5px; animation: blink 0.5s infinite alternate; }
+        .boss-hp-track { width: 100%; height: 20px; background: #001122; border: 3px solid #00aaff; border-radius: 10px; overflow: hidden; }
+        #boss-hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00aaff, #00ffff); transition: width 0.2s; }
+        .boss-hp-track.vulnerable { border-color: #ff0000; background: #220000; }
+        .boss-hp-track.vulnerable #boss-hp-fill { background: linear-gradient(90deg, #ff0000, #ff8800); }
+        #boss-timer-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 8rem; color: red; font-weight: bold; text-shadow: 0 0 30px red; z-index: 300; display: none; pointer-events: none; }
+        
+        /* 新增：提示動畫與顏色增強 */
+        @keyframes hintPulse {
+            0% { transform: scale(1); box-shadow: 0 5px 0 #bbb; }
+            50% { transform: scale(1.15); box-shadow: 0 0 15px #ffeb3b; border-color: #ffeb3b; z-index: 20; }
+            100% { transform: scale(1); box-shadow: 0 5px 0 #bbb; }
+        }
+        .grid-tile.hint-anim {
+            animation: hintPulse 1s infinite ease-in-out;
+            border: 3px solid #ffeb3b !important;
+            z-index: 20;
+        }
+
+        /* Leaderboard & Pause Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; animation: popIn 0.5s; }
+        .lb-content { background: #fff; width: 90%; max-width: 500px; padding: 20px; border-radius: 20px; text-align: center; border: 5px solid var(--secondary); max-height: 90vh; overflow-y: auto; }
+        .lb-title { font-size: 2.5rem; color: var(--danger); font-weight: bold; margin-bottom: 10px; }
+        .lb-score { font-size: 4rem; color: #333; font-weight: bold; margin: 10px 0; }
+        .lb-list { width: 100%; text-align: left; margin-bottom: 20px; border-collapse: collapse; }
+        .lb-list th, .lb-list td { padding: 8px; border-bottom: 1px solid #ddd; font-size: 1.2rem; }
+        .lb-list th { background: #eee; }
+        .lb-rank-1 { color: #f1c40f; font-weight: bold; }
+        .lb-rank-2 { color: #bdc3c7; font-weight: bold; }
+        .lb-rank-3 { color: #e67e22; font-weight: bold; }
+
+        .fps-hit-effect, .fps-miss-effect, .fps-flash-effect, .fps-beam, .fps-crosshair, .gun-part, #warp-container { pointer-events: none; }
+        
+        .fps-hit-effect { position: absolute; width: 100%; height: 100%; top:0; left:0; z-index: 999; box-shadow: inset 0 0 100px var(--success); opacity: 0; transition: opacity 0.1s; }
+        .fps-hit-effect.active { opacity: 1; }
+        .fps-miss-effect { position: absolute; width: 100%; height: 100%; top:0; left:0; z-index: 999; box-shadow: inset 0 0 100px var(--danger); opacity: 0; transition: opacity 0.1s; }
+        .fps-miss-effect.active { opacity: 1; }
+        .fps-flash-effect { position: absolute; width: 100%; height: 100%; top:0; left:0; z-index: 1000; background: white; opacity: 0; transition: opacity 0.5s; }
+        .fps-flash-effect.active { opacity: 1; }
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+        .screen-flash-red { animation: flashRed 0.3s; }
+        .screen-flash-green { animation: flashGreen 0.3s; }
+        @keyframes flashRed { 0% {box-shadow: inset 0 0 0 red;} 50% {box-shadow: inset 0 0 100px red;} 100% {box-shadow: inset 0 0 0 red;} }
+        @keyframes flashGreen { 0% {box-shadow: inset 0 0 0 lime;} 50% {box-shadow: inset 0 0 100px lime;} 100% {box-shadow: inset 0 0 0 lime;} }
+        .debris-particle { position: absolute; width: 40px; height: 40px; background: orange; border: 2px solid #fff; transform-style: preserve-3d; pointer-events: none; }
+        
+        .fps-gun-wrapper { position: absolute; bottom: 0; left: 50%; width: 0; height: 0; z-index: 100; perspective: 600px; pointer-events: none; transform: translate3d(0, -20px, 0); }
+        .fps-gun-pivot { position: absolute; bottom: 0; left: 0; transform-style: preserve-3d; transform-origin: center bottom; transition: transform 0.05s linear; }
+        .fps-gun-inner { position: absolute; bottom: 0; left: 0; transform-style: preserve-3d; }
+        .gun-part { position: absolute; background: #333; border: 1px solid #000; transform-style: preserve-3d; transition: background 0.3s; }
+        .gun-body { width: 100px; height: 350px; background: linear-gradient(90deg, #222, #555, #222); transform: translate3d(-50px, 0, 0); border-left: 4px solid var(--neon-blue); border-right: 4px solid var(--neon-blue); }
+        .gun-barrel-L { width: 30px; height: 200px; background: #111; transform: translate3d(-45px, -180px, 15px); border: 2px solid var(--neon-purple); }
+        .gun-barrel-R { width: 30px; height: 200px; background: #111; transform: translate3d(15px, -180px, 15px); border: 2px solid var(--neon-purple); }
+        .gun-core { width: 60px; height: 100px; background: var(--neon-blue); transform: translate3d(-30px, 80px, 25px); box-shadow: 0 0 40px var(--neon-blue); animation: pulseCore 0.2s infinite alternate; border-radius: 50%; }
+        
+        .weapon-gold .gun-body { background: linear-gradient(90deg, #b8860b, #ffd700, #b8860b); border-color: #fff; }
+        .weapon-gold .gun-barrel-L, .weapon-gold .gun-barrel-R { border-color: #ffd700; background: #554400; }
+        .weapon-gold .gun-core { background: #fff; box-shadow: 0 0 60px #ffd700; }
+        .weapon-gold .fps-beam { background: linear-gradient(90deg, #fff, #ffd700, #ffaa00); box-shadow: 0 0 40px #ffd700; height: 30px; }
+
+        @keyframes pulseCore { from { opacity: 0.8; } to { opacity: 1; } }
+        .fps-gun-inner.firing { animation: gunRecoil 0.15s ease-out; }
+        @keyframes gunRecoil { 0% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, 40px, 40px); } 100% { transform: translate3d(0, 0, 0); } }
+        .fps-crosshair { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; transform: translate(-50%, -50%); border: 3px solid var(--neon-pink); border-radius: 50%; pointer-events: none; z-index: 200; box-shadow: 0 0 15px var(--neon-pink); }
+        .fps-crosshair::after { content: ''; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: #fff; transform: translate(-50%, -50%); border-radius: 50%; }
+        .fps-beam { position: absolute; height: 20px; background: linear-gradient(90deg, #fff, var(--neon-blue), var(--neon-purple)); transform-origin: 0 50%; pointer-events: none; z-index: 95; box-shadow: 0 0 30px var(--neon-blue); opacity: 1; transition: opacity 0.15s ease-out; border-radius: 10px; }
+        .fps-particle { position: absolute; width: 15px; height: 15px; background: var(--neon-pink); box-shadow: 0 0 10px var(--neon-pink); border-radius: 50%; pointer-events: none; z-index: 90; }
+
+        /* Other Screens */
+        .header { display: flex; justify-content: center; padding: 5px; font-size: 1.8rem; font-weight: bold; color: #fff; margin-top: 15px; }
+        #game-screen, #practice-screen, #pinyin-screen { display: none; flex-direction: column; width: 100%; height: 100%; max-width: 800px; position: relative; }
+        .target-area { flex: 0.8; display: flex; justify-content: center; align-items: center; padding-bottom: 10px; }
+        .target-box { width: 240px; height: 240px; background: #fff; border: 12px dashed #aaa; border-radius: 50px; display: flex; justify-content: center; align-items: center; font-size: 8rem; color: #333; cursor: pointer; }
+        .target-box:active { transform: scale(0.95); background: #eee; }
+        .target-box.highlight { border-color: var(--secondary); background: #e0f0ff; transform: scale(1.05); }
+        .options-area { background: rgba(255,255,255,0.3); border-radius: 30px; padding: 30px 20px; flex: 1.2; display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 20px; width: 96%; margin: 0 auto 30px auto; }
+        .tile { width: 90px; height: 90px; background: #fff; border-radius: 20px; box-shadow: 0 6px 0 #ccc; display: flex; justify-content: center; align-items: center; font-size: 3.5rem; font-weight: bold; color: #333; cursor: grab; user-select: none; z-index: 10; }
+        .tile.dragging { position: fixed; z-index: 1000; opacity: 0.9; pointer-events: none; transform: scale(1.2); }
+        
+        /* LV3 Screen Layout Fixes */
+        #lv3-screen { display: none; flex-direction: column; width: 100%; height: 100%; max-width: 800px; position: relative; padding-top: 0; justify-content: flex-start; }
+        #lv3-screen .header { margin-top: 20px; margin-bottom: 5px; padding: 0; font-size: 1.5rem; color: #fff !important; font-weight: bold; flex-grow: 0; display: flex; justify-content: center; }
+        .lv3-top-area { flex: 0 0 auto; display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 15px; margin-top: 0; margin-bottom: 5px; padding: 5px 0; }
+        
+        /* Enlarged Boxes */
+        .lv3-char-box { width: 150px; height: 150px; background: #fff; border: 6px solid var(--pink); border-radius: 25px; display: flex; justify-content: center; align-items: center; font-size: 7rem; line-height: 1; font-weight: bold; color: #333; font-family: "KaiTi", "BiauKai", serif; box-shadow: 0 4px 8px rgba(0,0,0,0.1); cursor: pointer; }
+        .lv3-char-box:active { transform: scale(0.95); }
+        .lv3-input-box { width: 130px; height: 160px; background: rgba(255,255,255,0.6); border: 4px dashed #666; border-radius: 25px; position: relative; display: flex; justify-content: center; align-items: center; }
+        .lv3-input-box.correct { border-color: var(--success); background: #d1f7e9; border-style: solid; }
+        .lv3-input-box.wrong-shake { border-color: #ff6b6b; background: #ffcccc; border-style: solid; animation: shakeRed 1s; }
+        @keyframes shakeRed { 0%, 100% {transform: translateX(0);} 20%, 60% {transform: translateX(-10px);} 40%, 80% {transform: translateX(10px);} }
+        
+        /* Hint style - Updated for alignment */
+        .lv3-hint-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: row; 
+            justify-content: center; align-items: center;
+            opacity: 0.3; pointer-events: none; z-index: 1; color: #333;
+        }
+        .lv3-hint-overlay .pinyin-main { 
+            display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
+            line-height: 1; margin: 0; font-size: 3.5rem; 
+        }
+        .lv3-hint-overlay .pinyin-tone { 
+            font-size: 2rem; line-height: 1; 
+            display: flex; align-items: center; 
+            height: auto; margin-left: 2px; 
+        }
+        
+        /* Smaller Font for Content */
+        .pinyin-main { font-size: 3.5rem; line-height: 1; margin: 0; }
+        .pinyin-tone { font-size: 2rem; line-height: 1; }
+        
+        .lv3-controls { display: flex; justify-content: center; width: 100%; margin-top: 0; margin-bottom: 5px; flex-grow: 0; }
+        #pinyin-screen { padding-top: 65px; gap: 10px; align-items: center; }
+        .result-area { flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; justify-content: space-around; background: rgba(255,255,255,0.95); padding: 15px; box-shadow: 0 5px 10px rgba(0,0,0,0.1); z-index: 10; border-radius: 25px; margin-bottom: 10px; width: 96%; }
+        .keyboard-area { background: rgba(255,255,255,0.4); padding: 8px 8px 30px 8px; display: flex; flex-direction: column; gap: 6px; border-radius: 25px; flex: 1; width: 98%; align-self: center; margin-bottom: 20px; }
+        .keyboard-section { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 6px; background: rgba(255,255,255,0.6); padding: 6px; border-radius: 15px; flex: 1; align-content: center; }
+        .key-tile { background: #fff; height: 100%; min-height: 55px; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 2rem; font-weight: bold; box-shadow: 0 4px 0 #bbb; cursor: pointer; }
+        .key-tile:active { transform: translateY(2px); box-shadow: 0 0 0; background: #ffeaa7; }
+        .pinyin-box-display { width: 150px; height: 200px; border: 6px solid #333; border-radius: 30px; position: relative; display: flex; justify-content: center; align-items: center; transition: all 0.2s; background: #fff; }
+        .pinyin-box-display.shake { animation: shake 0.4s; border-color: #ff6b6b; background: #ffebeb; }
+        .practice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 15px; padding: 80px 20px 20px 20px; width: 100%; overflow-y: auto; }
+        .practice-tile { background: #fff; border-radius: 25px; aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; font-size: 2.8rem; font-weight: bold; color: #444; box-shadow: 0 6px 0 #ddd; cursor: pointer; }
+        .practice-tile.tone { background-color: #dfe6e9; }
+        
+        /* --- Battle Mode 修正版 --- */
+        #battle-screen { display: none; flex-direction: column; width: 100%; height: 100%; max-width: 800px; padding-top: 60px; position: relative; transition: background 0.2s; }
+        #battle-screen.quake { animation: earthquake 0.5s ease-in-out infinite; background-color: #ffcccc; }
+        
+        .monster-area { flex: 0.8; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 5px; }
+        .monster-hp-bar { width: 90%; height: 30px; background: #333; border: 3px solid #fff; border-radius: 15px; overflow: hidden; margin-bottom: 5px; }
+        .monster-hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff9f43, #ee5253); transition: width 0.2s; }
+        .monster-sprite { font-size: 10rem; animation: breathe 2s infinite ease-in-out; position: relative; z-index: 5; text-shadow: 0 10px 20px rgba(0,0,0,0.2); margin-top: -10px; }
+        .monster-sprite.hit { animation: shake 0.4s; filter: brightness(2) sepia(1) hue-rotate(-50deg) saturate(5); }
+        
+        .grid-container { width: 98%; aspect-ratio: 1/1; background: rgba(255,255,255,0.4); border-radius: 25px 25px 0 0; padding: 2%; position: relative; overflow: hidden; margin: 0 auto; }
+        
+        #battle-screen .grid-tile { background: #fff; border-radius: 15px; display: flex; justify-content: center; align-items: center; font-size: 2.4rem; font-weight: bold; color: #444; box-shadow: 0 5px 0 #bbb; cursor: pointer; transition: transform 0.2s ease-out, background 0.2s, top 0.25s, left 0.25s; position: absolute; width: 15.6%; height: 15.6%; z-index: 10; touch-action: manipulation; }
+        #battle-screen .grid-tile.selected { background: #ffeaa7; transform: scale(1.1); box-shadow: 0 0 15px var(--secondary); border: 4px solid var(--secondary); z-index: 100; }
+        #battle-screen .grid-tile.matched { transform: scale(0); opacity: 0; pointer-events: none; transition: all 0.3s ease-in; }
+
+        .projectile { position: absolute; font-size: 3rem; pointer-events: none; z-index: 1000; transition: all 0.4s linear; }
+        #earthquake-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); color: #fff; display: none; justify-content: center; align-items: center; font-size: 2.5rem; font-weight: bold; z-index: 200; border-radius: 25px; flex-direction: column; }
+        
+        @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-10px);} 75% {transform: translateX(10px);} }
+        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes earthquake { 0% { transform: translate(1px, 1px) rotate(0deg); } 25% { transform: translate(-3px, 0px) rotate(1deg); } 50% { transform: translate(-1px, 2px) rotate(-1deg); } 75% { transform: translate(3px, 1px) rotate(-1deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); } }
+
+        @media (min-width: 600px) {
+            #pinyin-screen { flex-direction: row; padding-top: 10px; }
+            #lv3-screen { flex-direction: column; }
+            .keyboard-area { max-height: none; flex: 1; margin-bottom: 20px; }
+            .lv3-top-area { flex: 1.5; }
+            .result-area { width: 300px; flex-direction: column; height: 80%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="menu-screen">
+        <h1 id="app-title">注音學習大冒險</h1>
+        <div class="menu-grid">
+            <div class="menu-btn btn-game" onclick="initAudio();showInstruction(1)">
+                <div class="menu-icon">👀</div>
+                <div class="menu-text">看(ㄎㄢˋ)字(ㄗˋ)認(ㄖㄣˋ)字(ㄗˋ)</div>
+            </div>
+            <div class="menu-btn btn-game" onclick="initAudio();showInstruction(2)">
+                <div class="menu-icon">👂</div>
+                <div class="menu-text">聽(ㄊㄧㄥ)音(ㄧㄣ)辨(ㄅㄧㄢˋ)位(ㄨㄟˋ)</div>
+            </div>
+            <div class="menu-btn btn-game-lv3" onclick="initAudio();showInstruction(3)">
+                <div class="menu-icon">📝</div>
+                <div class="menu-text">國(ㄍㄨㄛˊ)字(ㄗˋ)拼(ㄆㄧㄣ)音(ㄧㄣ)</div>
+            </div>
+            <div class="menu-btn btn-fps" onclick="initAudio();showInstruction(4)">
+                <div class="menu-icon">🔫</div>
+                <div class="menu-text"><span class="en-text">3D</span> 射(ㄕㄜˋ)擊(ㄐㄧˊ)</div>
+            </div>
+            <div class="menu-btn btn-battle" onclick="initAudio();showInstruction(5)">
+                <div class="menu-icon">⚔️</div>
+                <div class="menu-text">注(ㄓㄨˋ)音(ㄧㄣ)大(ㄉㄚˋ)戰(ㄓㄢˋ)</div>
+            </div>
+            <div class="menu-btn btn-pinyin" onclick="initAudio();showPinyin()">
+                <div class="menu-icon">🧩</div>
+                <div class="menu-text">拼(ㄆㄧㄣ)音(ㄧㄣ)練(ㄌㄧㄢˋ)習(ㄒㄧˊ)</div>
+            </div>
+            <div class="menu-btn btn-practice" onclick="initAudio();showPractice()">
+                <div class="menu-icon">📖</div>
+                <div class="menu-text">注(ㄓㄨˋ)音(ㄧㄣ)表(ㄅㄧㄠˇ)</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="instruction-modal">
+        <div class="instruction-content">
+            <div class="close-inst" onclick="closeInstruction()">×</div>
+            <div class="inst-title" id="inst-title"></div>
+            <div class="inst-text" id="inst-text"></div>
+            <button class="inst-btn" id="inst-start-btn">開(ㄎㄞ)始(ㄕˇ)</button>
+        </div>
+    </div>
+
+    <!-- FPS, Battle, Game, LV3, Practice Screens ... -->
+    <div id="fps-screen" style="display:none;">
+        <button class="pause-btn" onclick="toggleFPSPause()">⏸️ 暫停</button>
+        <div class="fps-hud">分數: <span id="fps-score">0</span></div>
+        <div class="fps-target" id="fps-target-display">目標: ㄅ</div>
+        <div id="boss-hud">
+            <div id="boss-warning">⚠️ BOSS WARNING ⚠️</div>
+            <div class="boss-hp-track" id="boss-track"><div id="boss-hp-fill"></div></div>
+        </div>
+        <div id="boss-timer-display">5</div>
+        <div id="warp-container"></div>
+        <div id="fps-bottom-panel">
+            <div id="fps-bars-container">
+                <div class="status-bar-group"><div class="status-label">SP (技能)</div><div class="bar-track"><div id="fps-sp-fill"></div></div></div>
+                <div class="status-bar-group"><div class="status-label">HP (血量)</div><div class="bar-track"><div id="fps-hp-fill"></div><div id="fps-hp-text">100/100</div></div></div>
+            </div>
+        </div>
+        <div id="fps-awake-btn" onclick="activateAwakening()">覺醒!</div>
+        <div class="fps-hit-effect" id="fps-hit-fx"></div><div class="fps-miss-effect" id="fps-miss-fx"></div><div class="fps-flash-effect" id="fps-flash-fx"></div>
+        <div id="fps-world"><div class="fps-floor"></div></div>
+        <div class="fps-gun-wrapper"><div class="fps-gun-pivot" id="fps-gun-pivot"><div class="fps-gun-inner" id="fps-gun-inner"><div class="gun-part gun-body"></div><div class="gun-part gun-barrel-L"></div><div class="gun-part gun-barrel-R"></div><div class="gun-part gun-core"></div></div></div></div>
+        <div class="fps-crosshair"></div>
+    </div>
+    
+    <div id="battle-screen" style="display:none;">
+        <button class="back-btn" onclick="goHome()">🏠 撤退</button>
+        <div class="monster-area"><div class="monster-hp-bar"><div class="monster-hp-fill" id="monster-hp"></div></div><div class="monster-sprite" id="monster">🦖</div><div style="font-size:1.8rem; color:#fff; font-weight:bold; margin-top:5px;">得分: <span id="battle-score">0</span></div></div>
+        <div class="grid-container" id="battle-grid"><div id="earthquake-overlay">🌋 地震重組中！</div></div>
+    </div>
+    
+    <div id="game-screen" style="display:none;">
+        <button class="back-btn" onclick="goHome()">🏠 回首頁</button>
+        <div class="header"><span id="level-display">關卡: 1/100</span></div>
+        <div class="target-area"><div class="target-box" id="target-box" onclick="speak(currentTarget)"><span id="target-content">ㄅ</span></div></div>
+        <div class="options-area" id="options-area"></div>
+    </div>
+
+    <div id="lv3-screen" style="display:none;">
+        <button class="back-btn" onclick="goHome()">🏠 回首頁</button>
+        <div class="header"><span id="lv3-level-display">關卡: 1/100</span></div>
+        <div class="lv3-top-area"><div class="lv3-char-box" id="lv3-char" onclick="speak(currentTargetChar)">爸</div><div class="lv3-input-box" id="lv3-input-display"><div class="pinyin-main" id="lv3-pinyin-main"></div><div class="pinyin-tone" id="lv3-pinyin-tone"></div></div></div>
+        <div class="lv3-controls"><button class="control-btn btn-clear" onclick="clearLV3Input()">清除重來</button></div>
+        <div class="keyboard-area" id="lv3-keyboard"></div>
+    </div>
+
+    <div id="practice-screen" style="display:none;"><button class="back-btn" onclick="goHome()">🏠 回首頁</button><div class="practice-grid" id="practice-grid"></div></div>
+    
+    <div id="pinyin-screen" style="display:none;">
+        <button class="back-btn" onclick="goHome()">🏠 回首頁</button>
+        <div class="result-area">
+            <div class="pinyin-box-display" id="pinyin-display" onclick="readPinyin()">
+                <div class="pinyin-main" id="pinyin-text"></div>
+                <div class="pinyin-tone" id="pinyin-tone-mark"></div>
+            </div>
+            <button class="control-btn btn-clear" onclick="clearPinyin()">清除</button>
+        </div>
+        <div class="keyboard-area" id="pinyin-keyboard"></div>
+    </div>
+    
+    <div class="modal" id="congrats-modal" style="display:none;"><div class="modal-content"><h2>🎉 太棒了！</h2><p>通過 10 關！</p><div class="menu-btn btn-game" onclick="nextPhase()" style="width: 100%; height: auto; padding: 20px;">繼續挑戰</div></div></div>
+    
+    <div class="modal" id="fps-pause-modal" style="display:none;">
+        <div class="modal-content">
+            <h2>⏸️ 遊戲暫停</h2>
+            <div class="mode-select" style="gap: 30px;">
+                <button class="inst-btn" style="background:var(--success);" onclick="toggleFPSPause()">▶️ 繼續遊戲</button>
+                <button class="inst-btn" style="background:#ff6b6b;" onclick="goHome()">🏠 放棄撤退</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="leaderboard-modal" style="display:none;">
+        <div class="lb-content">
+            <div class="lb-title">🏆 天梯排行榜</div>
+            <div>你的得分</div>
+            <div class="lb-score" id="final-score">0</div>
+            <table class="lb-list" id="lb-table"><thead><tr><th>名次</th><th>分數</th><th>日期</th></tr></thead><tbody></tbody></table>
+            <button class="inst-btn" onclick="closeLeaderboard()">再挑戰一次</button>
+            <button class="inst-btn" style="background:#ff6b6b; margin-top:10px;" onclick="closeLeaderboard();goHome()">回首頁</button>
+        </div>
+    </div>
+
+    <script>
+        // 【核心修復 1】提供涵蓋所有聲母、超過一千個常用注音組合的完整字典
+        const rawDict = "ㄅㄚ:八,ㄅㄚˊ:拔,ㄅㄚˇ:把,ㄅㄚˋ:爸,ㄅㄛ:波,ㄅㄛˊ:伯,ㄅㄛˇ:跛,ㄅㄛˋ:薄,ㄅㄞ:掰,ㄅㄞˊ:白,ㄅㄞˇ:百,ㄅㄞˋ:拜,ㄅㄟ:杯,ㄅㄟˇ:北,ㄅㄟˋ:背,ㄅㄠ:包,ㄅㄠˊ:雹,ㄅㄠˇ:寶,ㄅㄠˋ:報,ㄅㄢ:班,ㄅㄢˇ:板,ㄅㄢˋ:半,ㄅㄣ:奔,ㄅㄣˇ:本,ㄅㄣˋ:笨,ㄅㄤ:幫,ㄅㄤˇ:榜,ㄅㄤˋ:棒,ㄅㄥ:崩,ㄅㄥˋ:蹦,ㄅㄧ:逼,ㄅㄧˊ:鼻,ㄅㄧˇ:筆,ㄅㄧˋ:必,ㄅㄧㄠ:標,ㄅㄧㄠˇ:表,ㄅㄧㄠˋ:票,ㄅㄧㄝ:憋,ㄅㄧㄝˊ:別,ㄅㄧㄝˇ:癟,ㄅㄧㄢ:邊,ㄅㄧㄢˇ:扁,ㄅㄧㄢˋ:變,ㄅㄧㄣ:賓,ㄅㄧㄣˇ:稟,ㄅㄧㄣˋ:殯,ㄅㄧㄥ:冰,ㄅㄧㄥˇ:餅,ㄅㄧㄥˋ:病,ㄅㄨ:布,ㄅㄨˊ:不,ㄅㄨˇ:補,ㄅㄨˋ:部,ㄆㄚ:趴,ㄆㄚˊ:爬,ㄆㄚˋ:怕,ㄆㄛ:坡,ㄆㄛˊ:婆,ㄆㄛˇ:叵,ㄆㄛˋ:破,ㄆㄞ:拍,ㄆㄞˊ:排,ㄆㄞˋ:派,ㄆㄟ:胚,ㄆㄟˊ:陪,ㄆㄟˋ:配,ㄆㄠ:拋,ㄆㄠˊ:袍,ㄆㄠˇ:跑,ㄆㄠˋ:泡,ㄆㄢ:攀,ㄆㄢˊ:盤,ㄆㄢˋ:判,ㄆㄣ:噴,ㄆㄣˊ:盆,ㄆㄤ:滂,ㄆㄤˊ:旁,ㄆㄤˋ:胖,ㄆㄥ:怦,ㄆㄥˊ:朋,ㄆㄥˇ:捧,ㄆㄥˋ:碰,ㄆㄧ:批,ㄆㄧˊ:皮,ㄆㄧˇ:匹,ㄆㄧˋ:屁,ㄆㄧㄠ:飄,ㄆㄧㄠˊ:瓢,ㄆㄧㄠˇ:漂,ㄆㄧㄠˋ:票,ㄆㄧㄝ:瞥,ㄆㄧㄝˇ:撇,ㄆㄧㄢ:篇,ㄆㄧㄢˊ:便,ㄆㄧㄢˋ:片,ㄆㄧㄣ:拼,ㄆㄧㄣˊ:貧,ㄆㄧㄣˇ:品,ㄆㄧㄣˋ:聘,ㄆㄧㄥ:乒,ㄆㄧㄥˊ:平,ㄆㄧㄥˇ:屏,ㄆㄨ:撲,ㄆㄨˊ:葡,ㄆㄨˇ:普,ㄆㄨˋ:鋪,ㄇㄚ:媽,ㄇㄚˊ:麻,ㄇㄚˇ:馬,ㄇㄚˋ:罵,ㄇㄛ:摸,ㄇㄛˊ:磨,ㄇㄛˇ:抹,ㄇㄛˋ:默,ㄇㄜ˙:麼,ㄇㄞˊ:埋,ㄇㄞˇ:買,ㄇㄞˋ:賣,ㄇㄟ:沒,ㄇㄟˊ:梅,ㄇㄟˇ:美,ㄇㄟˋ:妹,ㄇㄠ:貓,ㄇㄠˊ:毛,ㄇㄠˇ:卯,ㄇㄠˋ:帽,ㄇㄡˊ:謀,ㄇㄡˇ:某,ㄇㄢ:瞞,ㄇㄢˇ:滿,ㄇㄢˋ:慢,ㄇㄣ:悶,ㄇㄣˊ:門,ㄇㄣˋ:悶,ㄇㄤˊ:忙,ㄇㄤˇ:莽,ㄇㄥ:蒙,ㄇㄥˊ:盟,ㄇㄥˇ:猛,ㄇㄥˋ:夢,ㄇㄧ:咪,ㄇㄧˊ:迷,ㄇㄧˇ:米,ㄇㄧˋ:密,ㄇㄧㄠ:喵,ㄇㄧㄠˊ:苗,ㄇㄧㄠˇ:秒,ㄇㄧㄠˋ:妙,ㄇㄧㄝ:咩,ㄇㄧㄝˋ:滅,ㄇㄧㄡˊ:繆,ㄇㄧㄢ:棉,ㄇㄧㄢˊ:綿,ㄇㄧㄢˇ:免,ㄇㄧㄢˋ:麵,ㄇㄧㄣ:民,ㄇㄧㄣˇ:敏,ㄇㄧㄥˊ:名,ㄇㄧㄥˇ:酩,ㄇㄧㄥˋ:命,ㄇㄨˊ:模,ㄇㄨˇ:母,ㄇㄨˋ:木,ㄈㄚ:發,ㄈㄚˊ:罰,ㄈㄚˇ:法,ㄈㄚˋ:髮,ㄈㄛˊ:佛,ㄈㄟ:飛,ㄈㄟˊ:肥,ㄈㄟˇ:匪,ㄈㄟˋ:費,ㄈㄡˇ:否,ㄈㄢ:翻,ㄈㄢˊ:凡,ㄈㄢˇ:反,ㄈㄢˋ:飯,ㄈㄣ:分,ㄈㄣˊ:墳,ㄈㄣˇ:粉,ㄈㄣˋ:份,ㄈㄤ:方,ㄈㄤˊ:房,ㄈㄤˇ:訪,ㄈㄤˋ:放,ㄈㄥ:風,ㄈㄥˊ:逢,ㄈㄥˋ:鳳,ㄈㄨ:夫,ㄈㄨˊ:福,ㄈㄨˇ:府,ㄈㄨˋ:富,ㄉㄚ:搭,ㄉㄚˊ:答,ㄉㄚˇ:打,ㄉㄚˋ:大,ㄉㄜ:的,ㄉㄜˊ:得,ㄉㄞ:呆,ㄉㄞˇ:歹,ㄉㄞˋ:帶,ㄉㄟˇ:得,ㄉㄠ:刀,ㄉㄠˇ:島,ㄉㄠˋ:到,ㄉㄡ:都,ㄉㄡˊ:兜,ㄉㄡˇ:抖,ㄉㄡˋ:豆,ㄉㄢ:單,ㄉㄢˇ:膽,ㄉㄢˋ:蛋,ㄉㄤ:當,ㄉㄤˇ:黨,ㄉㄤˋ:檔,ㄉㄥ:燈,ㄉㄥˇ:等,ㄉㄥˋ:凳,ㄉㄧ:低,ㄉㄧˊ:敵,ㄉㄧˇ:底,ㄉㄧˋ:地,ㄉㄧㄠ:雕,ㄉㄧㄠˋ:釣,ㄉㄧㄝ:爹,ㄉㄧㄝˊ:疊,ㄉㄧㄝˋ:碟,ㄉㄧㄡ:丟,ㄉㄧㄢ:顛,ㄉㄧㄢˇ:點,ㄉㄧㄢˋ:電,ㄉㄧㄥ:丁,ㄉㄧㄥˇ:頂,ㄉㄧㄥˋ:定,ㄉㄨ:嘟,ㄉㄨˊ:讀,ㄉㄨˇ:賭,ㄉㄨˋ:度,ㄉㄨㄛ:多,ㄉㄨㄛˊ:奪,ㄉㄨㄛˇ:躲,ㄉㄨㄛˋ:墮,ㄉㄨㄟ:堆,ㄉㄨㄟˋ:對,ㄉㄨㄢ:端,ㄉㄨㄢˇ:短,ㄉㄨㄢˋ:段,ㄉㄨㄣ:敦,ㄉㄨㄣˇ:盹,ㄉㄨㄣˋ:頓,ㄉㄨㄥ:東,ㄉㄨㄥˇ:懂,ㄉㄨㄥˋ:動,ㄊㄚ:他,ㄊㄚˇ:塔,ㄊㄚˋ:踏,ㄊㄜˋ:特,ㄊㄞ:胎,ㄊㄞˊ:台,ㄊㄞˇ:抬,ㄊㄞˋ:太,ㄊㄠ:濤,ㄊㄠˊ:逃,ㄊㄠˇ:討,ㄊㄠˋ:套,ㄊㄡ:偷,ㄊㄡˊ:頭,ㄊㄡˇ:鈄,ㄊㄡˋ:透,ㄊㄢ:貪,ㄊㄢˊ:談,ㄊㄢˇ:坦,ㄊㄢˋ:探,ㄊㄤ:湯,ㄊㄤˊ:糖,ㄊㄤˇ:躺,ㄊㄤˋ:燙,ㄊㄥˊ:疼,ㄊㄧ:梯,ㄊㄧˊ:題,ㄊㄧˇ:體,ㄊㄧˋ:替,ㄊㄧㄠ:挑,ㄊㄧㄠˊ:條,ㄊㄧㄠˇ:挑,ㄊㄧㄠˋ:跳,ㄊㄧㄝ:貼,ㄊㄧㄝˊ:鐵,ㄊㄧㄝˇ:鐵,ㄊㄧㄢ:天,ㄊㄧㄢˊ:甜,ㄊㄧㄢˇ:舔,ㄊㄧㄥ:聽,ㄊㄧㄥˊ:停,ㄊㄧㄥˇ:挺,ㄊㄨ:突,ㄊㄨˊ:圖,ㄊㄨˇ:土,ㄊㄨˋ:兔,ㄊㄨㄛ:拖,ㄊㄨㄛˊ:馱,ㄊㄨㄛˇ:妥,ㄊㄨㄛˋ:拓,ㄊㄨㄟ:推,ㄊㄨㄟˊ:頹,ㄊㄨㄟˇ:腿,ㄊㄨㄟˋ:退,ㄊㄨㄢˊ:團,ㄊㄨㄣ:吞,ㄊㄨㄣˊ:屯,ㄊㄨㄥ:通,ㄊㄨㄥˊ:同,ㄊㄨㄥˇ:統,ㄊㄨㄥˋ:痛,ㄋㄚ:那,ㄋㄚˊ:拿,ㄋㄚˇ:哪,ㄋㄜ:呢,ㄋㄞˇ:奶,ㄋㄞˋ:耐,ㄋㄟˋ:內,ㄋㄠˊ:撓,ㄋㄠˇ:腦,ㄋㄠˋ:鬧,ㄋㄡˋ:耨,ㄋㄢˊ:男,ㄋㄢˇ:赧,ㄋㄢˋ:難,ㄋㄣˋ:嫩,ㄋㄤˊ:囊,ㄋㄤˇ:曩,ㄋㄥˊ:能,ㄋㄧ:妮,ㄋㄧˊ:泥,ㄋㄧˇ:你,ㄋㄧˋ:逆,ㄋㄧㄠˇ:鳥,ㄋㄧㄠˋ:尿,ㄋㄧㄝ:捏,ㄋㄧㄝˋ:孽,ㄋㄧㄡˊ:牛,ㄋㄧㄡˇ:扭,ㄋㄧㄢ:拈,ㄋㄧㄢˊ:年,ㄋㄧㄢˇ:捻,ㄋㄧㄢˋ:念,ㄋㄧㄣˊ:您,ㄋㄧㄥˊ:寧,ㄋㄧㄥˇ:擰,ㄋㄨˊ:奴,ㄋㄨˇ:努,ㄋㄨˋ:怒,ㄋㄨㄛˊ:挪,ㄋㄨㄛˋ:諾,ㄋㄨㄢˇ:暖,ㄋㄨㄥˊ:農,ㄋㄨㄥˋ:弄,ㄋㄩˇ:女,ㄋㄩㄝˋ:虐,ㄌㄚ:拉,ㄌㄚˊ:喇,ㄌㄚˋ:辣,ㄌㄜˋ:樂,ㄌㄞˊ:來,ㄌㄞˋ:賴,ㄌㄟˊ:雷,ㄌㄟˇ:蕾,ㄌㄟˋ:類,ㄌㄠ:撈,ㄌㄠˊ:牢,ㄌㄠˇ:老,ㄌㄠˋ:烙,ㄌㄡˊ:樓,ㄌㄡˇ:簍,ㄌㄡˋ:漏,ㄌㄢˊ:藍,ㄌㄢˇ:懶,ㄌㄢˋ:爛,ㄌㄤˊ:狼,ㄌㄤˇ:朗,ㄌㄤˋ:浪,ㄌㄥˇ:冷,ㄌㄥˋ:愣,ㄌㄧ:哩,ㄌㄧˊ:梨,ㄌㄧˇ:李,ㄌㄧˋ:立,ㄌㄧㄠˊ:聊,ㄌㄧㄠˇ:了,ㄌㄧㄠˋ:料,ㄌㄧㄝˋ:烈,ㄌㄧㄡ:溜,ㄌㄧㄡˊ:流,ㄌㄧㄡˇ:柳,ㄌㄧㄡˋ:六,ㄌㄧㄢˊ:連,ㄌㄧㄢˇ:臉,ㄌㄧㄢˋ:練,ㄌㄧㄣˊ:林,ㄌㄧㄣˇ:凜,ㄌㄧㄣˋ:吝,ㄌㄧㄥ:拎,ㄌㄧㄥˊ:零,ㄌㄧㄥˇ:領,ㄌㄧㄥˋ:另,ㄌㄨ:嚕,ㄌㄨˊ:爐,ㄌㄨˇ:魯,ㄌㄨˋ:路,ㄌㄨㄛ:囉,ㄌㄨㄛˊ:羅,ㄌㄨㄛˇ:裸,ㄌㄨㄛˋ:落,ㄌㄨㄢˊ:鸞,ㄌㄨㄢˇ:卵,ㄌㄨㄢˋ:亂,ㄌㄨㄣˊ:輪,ㄌㄨㄥˊ:龍,ㄌㄨㄥˇ:攏,ㄌㄨㄥˋ:弄,ㄌㄩ:驢,ㄌㄩˇ:呂,ㄌㄩˋ:綠,ㄌㄩㄝˋ:略,ㄍㄚ:咖,ㄍㄜ:哥,ㄍㄜˊ:格,ㄍㄜˇ:葛,ㄍㄜˋ:各,ㄍㄞ:該,ㄍㄞˇ:改,ㄍㄞˋ:蓋,ㄍㄟˇ:給,ㄍㄠ:高,ㄍㄠˇ:搞,ㄍㄠˋ:告,ㄍㄡ:溝,ㄍㄡˇ:狗,ㄍㄡˋ:夠,ㄍㄢ:干,ㄍㄢˇ:敢,ㄍㄢˋ:幹,ㄍㄣ:根,ㄍㄣˋ:艮,ㄍㄤ:剛,ㄍㄤˇ:港,ㄍㄤˋ:槓,ㄍㄥ:更,ㄍㄥˇ:梗,ㄍㄨ:姑,ㄍㄨˊ:骨,ㄍㄨˇ:古,ㄍㄨˋ:故,ㄍㄨㄚ:瓜,ㄍㄨㄚˇ:寡,ㄍㄨㄚˋ:掛,ㄍㄨㄛ:鍋,ㄍㄨㄛˊ:國,ㄍㄨㄛˇ:果,ㄍㄨㄛˋ:過,ㄍㄨㄞ:乖,ㄍㄨㄞˇ:拐,ㄍㄨㄞˋ:怪,ㄍㄨㄟ:龜,ㄍㄨㄟˊ:鬼,ㄍㄨㄟˇ:軌,ㄍㄨㄟˋ:貴,ㄍㄨㄢ:關,ㄍㄨㄢˇ:管,ㄍㄨㄢˋ:貫,ㄍㄨㄣ:昆,ㄍㄨㄣˇ:滾,ㄍㄨㄣˋ:棍,ㄍㄨㄤ:光,ㄍㄨㄤˇ:廣,ㄍㄨㄤˋ:逛,ㄎㄚ:咖,ㄎㄚˇ:卡,ㄎㄜ:科,ㄎㄜˊ:咳,ㄎㄜˇ:可,ㄎㄜˋ:客,ㄎㄞ:開,ㄎㄞˇ:凱,ㄎㄠ:烤,ㄎㄠˇ:考,ㄎㄠˋ:靠,ㄎㄡ:摳,ㄎㄡˇ:口,ㄎㄡˋ:扣,ㄎㄢ:刊,ㄎㄢˇ:砍,ㄎㄢˋ:看,ㄎㄣˇ:肯,ㄎㄤ:康,ㄎㄤˊ:扛,ㄎㄤˋ:抗,ㄎㄥ:坑,ㄎㄨ:哭,ㄎㄨˇ:苦,ㄎㄨˋ:庫,ㄎㄨㄚ:誇,ㄎㄨㄚˇ:垮,ㄎㄨㄚˋ:跨,ㄎㄨㄛˋ:闊,ㄎㄨㄞˋ:快,ㄎㄨㄟ:虧,ㄎㄨㄟˊ:葵,ㄎㄨㄟˇ:傀,ㄎㄨㄟˋ:愧,ㄎㄨㄢ:寬,ㄎㄨㄢˇ:款,ㄎㄨㄣ:坤,ㄎㄨㄣˋ:困,ㄎㄨㄤ:筐,ㄎㄨㄤˊ:狂,ㄎㄨㄤˋ:礦,ㄏㄚ:哈,ㄏㄜ:喝,ㄏㄜˊ:和,ㄏㄜˋ:賀,ㄏㄞ:嗨,ㄏㄞˊ:孩,ㄏㄞˇ:海,ㄏㄞˋ:害,ㄏㄟ:黑,ㄏㄠ:豪,ㄏㄠˊ:毫,ㄏㄠˇ:好,ㄏㄠˋ:號,ㄏㄡ:侯,ㄏㄡˊ:猴,ㄏㄡˇ:吼,ㄏㄡˋ:後,ㄏㄢ:憨,ㄏㄢˊ:寒,ㄏㄢˇ:喊,ㄏㄢˋ:漢,ㄏㄣˇ:很,ㄏㄣˋ:恨,ㄏㄤˊ:航,ㄏㄥ:哼,ㄏㄥˊ:橫,ㄏㄨ:呼,ㄏㄨˊ:狐,ㄏㄨˇ:虎,ㄏㄨˋ:戶,ㄏㄨㄚ:花,ㄏㄨㄚˊ:華,ㄏㄨㄚˇ:化,ㄏㄨㄚˋ:畫,ㄏㄨㄛ:豁,ㄏㄨㄛˊ:活,ㄏㄨㄛˇ:火,ㄏㄨㄛˋ:貨,ㄏㄨㄞˊ:懷,ㄏㄨㄞˋ:壞,ㄏㄨㄟ:灰,ㄏㄨㄟˊ:回,ㄏㄨㄟˇ:毀,ㄏㄨㄟˋ:會,ㄏㄨㄢ:歡,ㄏㄨㄢˊ:還,ㄏㄨㄢˇ:緩,ㄏㄨㄢˋ:換,ㄏㄨㄣ:婚,ㄏㄨㄣˊ:魂,ㄏㄨㄣˇ:混,ㄏㄨㄤ:荒,ㄏㄨㄤˊ:黃,ㄏㄨㄤˇ:謊,ㄏㄨㄤˋ:晃,ㄐㄧ:機,ㄐㄧˊ:及,ㄐㄧˇ:幾,ㄐㄧˋ:記,ㄐㄧㄚ:家,ㄐㄧㄚˊ:夾,ㄐㄧㄚˇ:假,ㄐㄧㄚˋ:價,ㄐㄧㄝ:街,ㄐㄧㄝˊ:節,ㄐㄧㄝˇ:姐,ㄐㄧㄝˋ:借,ㄐㄧㄠ:交,ㄐㄧㄠˊ:嚼,ㄐㄧㄠˇ:角,ㄐㄧㄠˋ:叫,ㄐㄧㄡ:究,ㄐㄧㄡˊ:糾,ㄐㄧㄡˇ:酒,ㄐㄧㄡˋ:舊,ㄐㄧㄢ:尖,ㄐㄧㄢˊ:閒,ㄐㄧㄢˇ:剪,ㄐㄧㄢˋ:建,ㄐㄧㄣ:金,ㄐㄧㄣˇ:緊,ㄐㄧㄣˋ:進,ㄐㄧㄤ:江,ㄐㄧㄤˇ:講,ㄐㄧㄤˋ:降,ㄐㄧㄥ:京,ㄐㄧㄥˊ:晶,ㄐㄧㄥˇ:景,ㄐㄧㄥˋ:靜,ㄐㄩ:居,ㄐㄩˊ:局,ㄐㄩˇ:舉,ㄐㄩˋ:句,ㄐㄩㄝˊ:決,ㄐㄩㄢ:捐,ㄐㄩㄢˇ:捲,ㄐㄩㄢˋ:卷,ㄐㄩㄣ:軍,ㄐㄩㄣˋ:俊,ㄐㄩㄥˇ:窘,ㄑㄧ:七,ㄑㄧˊ:奇,ㄑㄧˇ:起,ㄑㄧˋ:氣,ㄑㄧㄚ:掐,ㄑㄧㄚˇ:卡,ㄑㄧㄚˋ:恰,ㄑㄧㄝ:切,ㄑㄧㄝˊ:茄,ㄑㄧㄝˇ:且,ㄑㄧㄝˋ:切,ㄑㄧㄠ:敲,ㄑㄧㄠˊ:橋,ㄑㄧㄠˇ:巧,ㄑㄧㄠˋ:俏,ㄑㄧㄡ:秋,ㄑㄧㄡˊ:求,ㄑㄧㄢ:千,ㄑㄧㄢˊ:錢,ㄑㄧㄢˇ:淺,ㄑㄧㄢˋ:欠,ㄑㄧㄣ:親,ㄑㄧㄣˊ:琴,ㄑㄧㄣˇ:寢,ㄑㄧㄤ:槍,ㄑㄧㄤˊ:強,ㄑㄧㄤˇ:搶,ㄑㄧㄥ:青,ㄑㄧㄥˊ:情,ㄑㄧㄥˇ:請,ㄑㄧㄥˋ:慶,ㄑㄩ:區,ㄑㄩˊ:渠,ㄑㄩˇ:取,ㄑㄩˋ:去,ㄑㄩㄝ:缺,ㄑㄩㄝˊ:瘸,ㄑㄩㄝˋ:卻,ㄑㄩㄢ:圈,ㄑㄩㄢˊ:全,ㄑㄩㄢˇ:犬,ㄑㄩㄢˋ:勸,ㄑㄩㄣˊ:群,ㄑㄩㄥˊ:窮,ㄒㄧ:西,ㄒㄧˊ:席,ㄒㄧˇ:洗,ㄒㄧˋ:細,ㄒㄧㄚ:瞎,ㄒㄧㄚˊ:俠,ㄒㄧㄚˇ:狹,ㄒㄧㄚˋ:下,ㄒㄧㄝ:些,ㄒㄧㄝˊ:鞋,ㄒㄧㄝˇ:寫,ㄒㄧㄝˋ:謝,ㄒㄧㄠ:消,ㄒㄧㄠˊ:淆,ㄒㄧㄠˇ:小,ㄒㄧㄠˋ:笑,ㄒㄧㄡ:修,ㄒㄧㄡˇ:朽,ㄒㄧㄡˋ:秀,ㄒㄧㄢ:先,ㄒㄧㄢˊ:嫌,ㄒㄧㄢˇ:險,ㄒㄧㄢˋ:線,ㄒㄧㄣ:新,ㄒㄧㄣˊ:尋,ㄒㄧㄣˋ:信,ㄒㄧㄤ:香,ㄒㄧㄤˊ:詳,ㄒㄧㄤˇ:想,ㄒㄧㄤˋ:向,ㄒㄧㄥ:星,ㄒㄧㄥˊ:行,ㄒㄧㄥˇ:醒,ㄒㄧㄥˋ:姓,ㄒㄩ:需,ㄒㄩˊ:徐,ㄒㄩˇ:許,ㄒㄩˋ:續,ㄒㄩㄝ:靴,ㄒㄩㄝˊ:學,ㄒㄩㄝˇ:血,ㄒㄩㄢ:宣,ㄒㄩㄢˊ:懸,ㄒㄩㄢˇ:選,ㄒㄩㄢˋ:炫,ㄒㄩㄣ:勳,ㄒㄩㄣˊ:尋,ㄒㄩㄣˋ:訓,ㄒㄩㄥ:凶,ㄒㄩㄥˊ:熊,ㄓ:知,ㄓˊ:直,ㄓˇ:指,ㄓˋ:至,ㄓㄚ:扎,ㄓㄚˊ:炸,ㄓㄚˇ:眨,ㄓㄚˋ:詐,ㄓㄜ:遮,ㄓㄜˊ:折,ㄓㄜˇ:者,ㄓㄜˋ:這,ㄓㄞ:摘,ㄓㄞˊ:宅,ㄓㄞˇ:窄,ㄓㄞˋ:債,ㄓㄠ:招,ㄓㄠˊ:著,ㄓㄠˇ:找,ㄓㄠˋ:照,ㄓㄡ:周,ㄓㄡˊ:軸,ㄓㄡˇ:肘,ㄓㄡˋ:咒,ㄓㄢ:沾,ㄓㄢˇ:展,ㄓㄢˋ:戰,ㄓㄣ:真,ㄓㄣˇ:診,ㄓㄣˋ:陣,ㄓㄤ:張,ㄓㄤˇ:長,ㄓㄤˋ:帳,ㄓㄥ:爭,ㄓㄥˇ:整,ㄓㄥˋ:正,ㄓㄨ:豬,ㄓㄨˊ:竹,ㄓㄨˇ:主,ㄓㄨˋ:住,ㄓㄨㄚ:抓,ㄓㄨㄚˇ:爪,ㄓㄨㄛ:桌,ㄓㄨㄛˊ:濁,ㄓㄨㄞˋ:拽,ㄓㄨㄟ:追,ㄓㄨㄟˋ:墜,ㄓㄨㄢ:專,ㄓㄨㄢˇ:轉,ㄓㄨㄢˋ:賺,ㄓㄨㄣ:諄,ㄓㄨㄣˇ:準,ㄓㄨㄤ:裝,ㄓㄨㄤˋ:狀,ㄔ:吃,ㄔˊ:遲,ㄔˇ:尺,ㄔˋ:赤,ㄔㄚ:差,ㄔㄚˊ:茶,ㄔㄚˇ:衩,ㄔㄚˋ:剎,ㄔㄜ:車,ㄔㄜˇ:扯,ㄔㄜˋ:撤,ㄔㄞ:拆,ㄔㄞˊ:柴,ㄔㄠ:超,ㄔㄠˊ:潮,ㄔㄠˇ:吵,ㄔㄡ:抽,ㄔㄡˊ:仇,ㄔㄡˇ:醜,ㄔㄡˋ:臭,ㄔㄢ:攙,ㄔㄢˊ:纏,ㄔㄢˇ:產,ㄔㄢˋ:顫,ㄔㄣˊ:晨,ㄔㄣˇ:磣,ㄔㄣˋ:趁,ㄔㄤ:昌,ㄔㄤˊ:長,ㄔㄤˇ:廠,ㄔㄤˋ:唱,ㄔㄥ:稱,ㄔㄥˊ:成,ㄔㄥˇ:逞,ㄔㄥˋ:秤,ㄔㄨ:初,ㄔㄨˊ:除,ㄔㄨˇ:楚,ㄔㄨˋ:處,ㄔㄨㄛ:戳,ㄔㄨㄟ:吹,ㄔㄨㄟˊ:垂,ㄔㄨㄢ:穿,ㄔㄨㄢˊ:傳,ㄔㄨㄢˇ:喘,ㄔㄨㄢˋ:串,ㄔㄨㄣ:春,ㄔㄨㄣˊ:純,ㄔㄨㄣˇ:蠢,ㄔㄨㄤ:窗,ㄔㄨㄤˊ:床,ㄔㄨㄤˇ:闖,ㄔㄨㄤˋ:創,ㄕ:師,ㄕˊ:十,ㄕˇ:使,ㄕˋ:是,ㄕㄚ:沙,ㄕㄚˇ:傻,ㄕㄚˋ:煞,ㄕㄜ:奢,ㄕㄜˊ:蛇,ㄕㄜˇ:捨,ㄕㄜˋ:射,ㄕㄞ:篩,ㄕㄞˇ:骰,ㄕㄞˋ:曬,ㄕㄠ:燒,ㄕㄠˊ:勺,ㄕㄠˇ:少,ㄕㄠˋ:哨,ㄕㄡ:收,ㄕㄡˊ:熟,ㄕㄡˇ:手,ㄕㄡˋ:受,ㄕㄢ:山,ㄕㄢˇ:閃,ㄕㄢˋ:善,ㄕㄣ:深,ㄕㄣˊ:神,ㄕㄣˇ:審,ㄕㄣˋ:甚,ㄕㄤ:商,ㄕㄤˇ:賞,ㄕㄤˋ:上,ㄕㄥ:生,ㄕㄥˊ:繩,ㄕㄥˇ:省,ㄕㄥˋ:勝,ㄕㄨ:書,ㄕㄨˊ:熟,ㄕㄨˇ:數,ㄕㄨˋ:樹,ㄕㄨㄚ:刷,ㄕㄨㄚˇ:耍,ㄕㄨㄛ:說,ㄕㄨㄛˋ:碩,ㄕㄨㄞ:摔,ㄕㄨㄞˇ:甩,ㄕㄨㄞˋ:帥,ㄕㄨㄟ:誰,ㄕㄨㄟˇ:水,ㄕㄨㄟˋ:睡,ㄕㄨㄢ:栓,ㄕㄨㄢˋ:涮,ㄕㄨㄣˋ:順,ㄕㄨㄤ:雙,ㄕㄨㄤˇ:爽,ㄖㄜˇ:惹,ㄖㄜˋ:熱,ㄖㄠˊ:饒,ㄖㄠˇ:擾,ㄖㄠˋ:繞,ㄖㄡˊ:柔,ㄖㄡˋ:肉,ㄖㄢˊ:然,ㄖㄢˇ:染,ㄖㄣˊ:人,ㄖㄣˇ:忍,ㄖㄣˋ:認,ㄖㄤˊ:瓤,ㄖㄤˇ:壤,ㄖㄤˋ:讓,ㄖㄥ:扔,ㄖㄥˊ:仍,ㄖㄨˊ:如,ㄖㄨˇ:乳,ㄖㄨˋ:入,ㄖㄨㄛˋ:弱,ㄖㄨㄟˋ:瑞,ㄖㄨㄢˇ:軟,ㄖㄨㄣˋ:潤,ㄖㄨㄥˊ:容,ㄖㄨㄥˇ:冗,ㄗ:資,ㄗˊ:子,ㄗˇ:紫,ㄗˋ:字,ㄗㄚ:扎,ㄗㄚˊ:雜,ㄗㄜˊ:則,ㄗㄜˋ:仄,ㄗㄞ:栽,ㄗㄞˇ:宰,ㄗㄞˋ:再,ㄗㄟˊ:賊,ㄗㄠ:糟,ㄗㄠˊ:鑿,ㄗㄠˇ:早,ㄗㄠˋ:造,ㄗㄡ:鄒,ㄗㄡˇ:走,ㄗㄡˋ:奏,ㄗㄢ:簪,ㄗㄢˇ:攢,ㄗㄢˋ:讚,ㄗㄣˇ:怎,ㄗㄤ:髒,ㄗㄤˋ:葬,ㄗㄥ:增,ㄗㄥˋ:贈,ㄗㄨ:租,ㄗㄨˊ:足,ㄗㄨˇ:祖,ㄗㄨㄛ:作,ㄗㄨㄛˊ:昨,ㄗㄨㄛˇ:左,ㄗㄨㄛˋ:做,ㄗㄨㄟ:嘴,ㄗㄨㄟˋ:最,ㄗㄨㄢ:鑽,ㄗㄨㄢˇ:纘,ㄗㄨㄢˋ:賺,ㄗㄨㄣ:尊,ㄗㄨㄥ:宗,ㄗㄨㄥˇ:總,ㄗㄨㄥˋ:縱,ㄘ:疵,ㄘˊ:詞,ㄘˇ:此,ㄘˋ:次,ㄘㄚ:擦,ㄘㄜˋ:測,ㄘㄞ:猜,ㄘㄞˊ:才,ㄘㄞˇ:彩,ㄘㄞˋ:菜,ㄘㄠ:操,ㄘㄠˊ:曹,ㄘㄠˇ:草,ㄘㄡˋ:湊,ㄘㄢ:參,ㄘㄢˊ:殘,ㄘㄢˇ:慘,ㄘㄢˋ:燦,ㄘㄣ:參,ㄘㄤ:倉,ㄘㄤˊ:藏,ㄘㄥˊ:層,ㄘㄥˋ:蹭,ㄘㄨ:粗,ㄘㄨˊ:徂,ㄘㄨˋ:促,ㄘㄨㄛ:搓,ㄘㄨㄛˊ:痤,ㄘㄨㄛˇ:撮,ㄘㄨㄛˋ:錯,ㄘㄨㄟ:催,ㄘㄨㄟˋ:脆,ㄘㄨㄢ:汆,ㄘㄨㄢˊ:攢,ㄘㄨㄢˋ:串,ㄘㄨㄣ:村,ㄘㄨㄣˊ:存,ㄘㄨㄣˇ:忖,ㄘㄨㄣˋ:寸,ㄘㄨㄥ:聰,ㄘㄨㄥˊ:從,ㄙ:司,ㄙˇ:死,ㄙˋ:四,ㄙㄚ:撒,ㄙㄚˇ:灑,ㄙㄜˋ:色,ㄙㄞ:腮,ㄙㄠ:騷,ㄙㄠˇ:嫂,ㄙㄠˋ:掃,ㄙㄡ:搜,ㄙㄡˇ:叟,ㄙㄡˋ:嗽,ㄙㄢ:三,ㄙㄢˇ:傘,ㄙㄢˋ:散,ㄙㄣ:森,ㄙㄤ:喪,ㄙㄤˇ:嗓,ㄙㄤˋ:喪,ㄙㄥ:僧,ㄙㄨ:蘇,ㄙㄨˊ:俗,ㄙㄨˇ:宿,ㄙㄨˋ:素,ㄙㄨㄛ:縮,ㄙㄨㄛˇ:鎖,ㄙㄨㄟ:雖,ㄙㄨㄟˊ:隨,ㄙㄨㄟˇ:髓,ㄙㄨㄟˋ:歲,ㄙㄨㄢ:酸,ㄙㄨㄢˋ:算,ㄙㄨㄣ:孫,ㄙㄨㄣˇ:損,ㄙㄨㄥ:鬆,ㄙㄨㄥˇ:聳,ㄙㄨㄥˋ:送,ㄚ:阿,ㄚˊ:啊,ㄚˇ:啊,ㄚˋ:啊,ㄛ:哦,ㄛˊ:哦,ㄛˇ:哦,ㄛˋ:哦,ㄜ:婀,ㄜˊ:鵝,ㄜˇ:噁,ㄜˋ:餓,ㄝ:耶,ㄞ:哀,ㄞˊ:挨,ㄞˇ:矮,ㄞˋ:愛,ㄟ:欸,ㄠ:凹,ㄠˊ:熬,ㄠˇ:襖,ㄠˋ:傲,ㄡ:歐,ㄡˊ:偶,ㄡˇ:藕,ㄡˋ:漚,ㄢ:安,ㄢˇ:俺,ㄢˋ:暗,ㄣ:恩,ㄤ:骯,ㄤˊ:昂,ㄥ:鞥,ㄦˊ:兒,ㄦˇ:耳,ㄦˋ:二,ㄧ:一,ㄧˊ:疑,ㄧˇ:以,ㄧˋ:意,ㄧㄚ:丫,ㄧㄚˊ:牙,ㄧㄚˇ:雅,ㄧㄚˋ:亞,ㄧㄛ:喲,ㄧㄝ:耶,ㄧㄝˊ:爺,ㄧㄝˇ:也,ㄧㄝˋ:夜,ㄧㄞˊ:崖,ㄧㄠ:要,ㄧㄠˊ:搖,ㄧㄠˇ:咬,ㄧㄠˋ:藥,ㄧㄡ:悠,ㄧㄡˊ:由,ㄧㄡˇ:有,ㄧㄡˋ:又,ㄧㄢ:煙,ㄧㄢˊ:言,ㄧㄢˇ:眼,ㄧㄢˋ:燕,ㄧㄣ:音,ㄧㄣˊ:銀,ㄧㄣˇ:引,ㄧㄣˋ:印,ㄧㄤ:央,ㄧㄤˊ:羊,ㄧㄤˇ:仰,ㄧㄤˋ:樣,ㄧㄥ:英,ㄧㄥˊ:營,ㄧㄥˇ:影,ㄧㄥˋ:硬,ㄨ:屋,ㄨˊ:無,ㄨˇ:五,ㄨˋ:物,ㄨㄚ:挖,ㄨㄚˊ:娃,ㄨㄚˇ:瓦,ㄨㄚˋ:襪,ㄨㄛ:窩,ㄨㄛˇ:我,ㄨㄛˋ:握,ㄨㄞ:歪,ㄨㄞˇ:崴,ㄨㄞˋ:外,ㄨㄟ:威,ㄨㄟˊ:為,ㄨㄟˇ:尾,ㄨㄟˋ:胃,ㄨㄢ:彎,ㄨㄢˊ:玩,ㄨㄢˇ:晚,ㄨㄢˋ:萬,ㄨㄣ:溫,ㄨㄣˊ:文,ㄨㄣˇ:穩,ㄨㄣˋ:問,ㄨㄤ:汪,ㄨㄤˊ:王,ㄨㄤˇ:網,ㄨㄤˋ:忘,ㄨㄥ:翁,ㄨㄥˇ:蓊,ㄨㄥˋ:甕,ㄩ:迂,ㄩˊ:魚,ㄩˇ:雨,ㄩˋ:玉,ㄩㄝ:約,ㄩㄝˊ:曰,ㄩㄝˋ:月,ㄩㄢ:冤,ㄩㄢˊ:元,ㄩㄢˇ:遠,ㄩㄢˋ:願,ㄩㄣ:暈,ㄩㄣˊ:雲,ㄩㄣˇ:允,ㄩㄣˋ:運,ㄩㄥ:擁,ㄩㄥˇ:勇,ㄩㄥˋ:用";
+        
+        const bopomofoMap = {};
+        const lv3Data = [];
+        const validBaseSet = new Set(); // 記錄所有合法的基礎拼音（無聲調）
+        
+        rawDict.split(',').forEach(item => {
+            const parts = item.split(':');
+            if(parts.length === 2) {
+                const key = parts[0];
+                const val = parts[1];
+                bopomofoMap[key] = val;
+                lv3Data.push({z: key, c: val});
+                // 儲存去除聲調的合法基底，支援 TTS 自動發音
+                validBaseSet.add(key.replace(/[ˊˇˋ˙]/g, ''));
+            }
+        });
+        
+        const initials = ['ㄅ','ㄆ','ㄇ','ㄈ','ㄉ','ㄊ','ㄋ','ㄌ','ㄍ','ㄎ','ㄏ','ㄐ','ㄑ','ㄒ','ㄓ','ㄔ','ㄕ','ㄖ','ㄗ','ㄘ','ㄙ'];
+        const medials = ['ㄧ','ㄨ','ㄩ'];
+        const pureFinals = ['ㄚ','ㄛ','ㄜ','ㄝ','ㄞ','ㄟ','ㄠ','ㄡ','ㄢ','ㄣ','ㄤ','ㄥ','ㄦ'];
+        const finalsDisplay = [...medials, ...pureFinals];
+        const zhuyinAll = [...initials, ...finalsDisplay];
+
+        const soundMap = {
+            'ㄅ':'波', 'ㄆ':'坡', 'ㄇ':'摸',
+            'ˊ':'二聲', 'ˇ':'三聲', 'ˋ':'四聲', '˙':'輕聲', '一聲':'一聲'
+        };
+
+        const gameInstructions = {
+            1: { title: "睜(ㄓㄥ)大(ㄉㄚˋ)眼(ㄧㄢˇ)睛(ㄐㄧㄥ)，幫(ㄅㄤ)注(ㄓㄨˋ)音(ㄧㄣ)找(ㄓㄠˇ)雙(ㄕㄨㄤ)胞(ㄅㄠ)胎(ㄊㄞ)！", text: "畫(ㄏㄨㄚˋ)面(ㄇㄧㄢˋ)中(ㄓㄨㄥ)間(ㄐㄧㄢ)會(ㄏㄨㄟˋ)出(ㄔㄨ)現(ㄒㄧㄢˋ)一(ㄧˊ)個(ㄍㄜ˙)大(ㄉㄚˋ)注(ㄓㄨˋ)音(ㄧㄣ)。<br>請(ㄑㄧㄥˇ)在(ㄗㄞˋ)下(ㄒㄧㄚˋ)方(ㄈㄤ)找(ㄓㄠˇ)出(ㄔㄨ)一(ㄧ)模(ㄇㄛˊ)一(ㄧ)樣(ㄧㄤˋ)的(ㄉㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)，拖(ㄊㄨㄛ)曳(ㄧˋ)到(ㄉㄠˋ)中(ㄓㄨㄥ)間(ㄐㄧㄢ)的(ㄉㄜ˙)框(ㄎㄨㄤ)框(ㄎㄨㄤ)。", startFunc: () => startGame(1) },
+            2: { title: "打(ㄉㄚˇ)開(ㄎㄞ)耳(ㄦˇ)朵(ㄉㄨㄛ˙)，聽(ㄊㄧㄥ)聽(ㄊㄧㄥ)這(ㄓㄜˋ)是(ㄕˋ)什(ㄕㄜˊ)麼(ㄇㄜ˙)聲(ㄕㄥ)音(ㄧㄣ)？", text: "遊(ㄧㄡˊ)戲(ㄒㄧˋ)會(ㄏㄨㄟˋ)播(ㄅㄛ)放(ㄈㄤˋ)一(ㄧˊ)個(ㄍㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)的(ㄉㄜ˙)讀(ㄉㄨˊ)音(ㄧㄣ)。<br>仔(ㄗˇ)細(ㄒㄧˋ)聽(ㄊㄧㄥ)，找(ㄓㄠˇ)出(ㄔㄨ)正(ㄓㄥˋ)確(ㄑㄩㄝˋ)的(ㄉㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)，把(ㄅㄚˇ)它(ㄊㄚ)拖(ㄊㄨㄛ)曳(ㄧˋ)到(ㄉㄠˋ)中(ㄓㄨㄥ)間(ㄐㄧㄢ)的(ㄉㄜ˙)耳(ㄦˇ)朵(ㄉㄨㄛ˙)上(ㄕㄤˋ)。", startFunc: () => startGame(2) },
+            3: { title: "我(ㄨㄛˇ)是(ㄕˋ)拼(ㄆㄧㄣ)音(ㄧㄣ)小(ㄒㄧㄠˇ)老(ㄌㄠˇ)師(ㄕ)，這(ㄓㄜˋ)個(ㄍㄜ˙)字(ㄗˋ)怎(ㄗㄣˇ)麼(ㄇㄜ˙)唸(ㄋㄧㄢˋ)？", text: "畫(ㄏㄨㄚˋ)面(ㄇㄧㄢˋ)上(ㄕㄤˋ)方(ㄈㄤ)會(ㄏㄨㄟˋ)出(ㄔㄨ)現(ㄒㄧㄢˋ)一(ㄧˊ)個(ㄍㄜ˙)國(ㄍㄨㄛˊ)字(ㄗˋ)。<br>依(ㄧ)序(ㄒㄩˋ)點(ㄉㄧㄢˇ)選(ㄒㄩㄢˇ)正(ㄓㄥˋ)確(ㄑㄩㄝˋ)的(ㄉㄜ˙) 聲(ㄕㄥ)母(ㄇㄨˇ)、韻(ㄩㄣˋ)母(ㄇㄨˇ) 與(ㄩˇ) 聲(ㄕㄥ)調(ㄉㄧㄠˋ)，拼(ㄆㄧㄣ)出(ㄔㄨ)這(ㄓㄜˋ)個(ㄍㄜ˙)字(ㄗˋ)！", startFunc: () => startLV3() },
+            4: { title: "瞄(ㄇㄧㄠˊ)準(ㄓㄨㄣˇ)目(ㄇㄨˋ)標(ㄅㄧㄠ)，擊(ㄐㄧˊ)落(ㄌㄨㄛˋ)飛(ㄈㄟ)來(ㄌㄞˊ)的(ㄉㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)！", text: "這(ㄓㄜˋ)是(ㄕˋ)射(ㄕㄜˋ)擊(ㄐㄧˊ)遊(ㄧㄡˊ)戲(ㄒㄧˋ)，看(ㄎㄢˋ)清(ㄑㄧㄥ)楚(ㄔㄨˇ)上(ㄕㄤˋ)方(ㄈㄤ)的(ㄉㄜ˙)「目(ㄇㄨˋ)標(ㄅㄧㄠ)」注(ㄓㄨˋ)音(ㄧㄣ)。<br>擊(ㄐㄧˊ)中(ㄓㄨㄥˋ)敵(ㄉㄧˊ)人(ㄖㄣˊ)可(ㄎㄜˇ)集(ㄐㄧˊ)氣(ㄑㄧˋ)，集(ㄐㄧˊ)滿(ㄇㄢˇ)按(ㄢˋ)下(ㄒㄧㄚˋ)覺(ㄐㄩㄝˊ)醒(ㄒㄧㄥˇ)可(ㄎㄜˇ)以(ㄧˇ)連(ㄌㄧㄢˊ)射(ㄕㄜˋ)喔(ㄛ)！", startFunc: () => startFPS() },
+            5: { title: "連(ㄌㄧㄢˊ)線(ㄒㄧㄢˋ)消(ㄒㄧㄠ)除(ㄔㄨˊ)，打(ㄉㄚˇ)敗(ㄅㄞˋ)大(ㄉㄚˋ)怪(ㄍㄨㄞˋ)獸(ㄕㄡˋ)！", text: "點(ㄉㄧㄢˇ)擊(ㄐㄧˊ)兩(ㄌㄧㄤˇ)個(ㄍㄜ˙)相(ㄒㄧㄤ)鄰(ㄌㄧㄣˊ)的(ㄉㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)來(ㄌㄞˊ)交(ㄐㄧㄠ)換(ㄏㄨㄢˋ)位(ㄨㄟˋ)置(ㄓˋ)。<br>把(ㄅㄚˇ) 3 個(ㄍㄜ˙)一(ㄧ)樣(ㄧㄤˋ)的(ㄉㄜ˙)注(ㄓㄨˋ)音(ㄧㄣ)連(ㄌㄧㄢˊ)成(ㄔㄥˊ)一(ㄧˋ)線(ㄒㄧㄢˋ)就(ㄐㄧㄡˋ)可(ㄎㄜˇ)以(ㄧˇ)攻(ㄍㄨㄥ)擊(ㄐㄧˊ)怪(ㄍㄨㄞˋ)獸(ㄕㄡˋ)！<br>連(ㄌㄧㄢˊ)鎖(ㄙㄨㄛˇ)越(ㄩㄝˋ)多(ㄉㄨㄛ)，攻(ㄍㄨㄥ)擊(ㄐㄧˊ)力(ㄌㄧˋ)越(ㄩㄝˋ)強(ㄑㄧㄤˊ)喔(ㄛ)！", startFunc: () => startBattle() }
+        };
+
+        function parseZhuyinText(text) {
+            return text.replace(/([\u4e00-\u9fa50-9a-zA-Z：]+)\(([^\)]+)\)/g, function(match, char, zhuyin) {
+                let tone = '', symbols = zhuyin, toneClass = 'zy-tone';
+                if (zhuyin.includes('˙')) { tone = '˙'; symbols = zhuyin.replace('˙', ''); toneClass += ' light'; }
+                else if (zhuyin.includes('ˊ')) { tone = 'ˊ'; symbols = zhuyin.replace('ˊ', ''); }
+                else if (zhuyin.includes('ˇ')) { tone = 'ˇ'; symbols = zhuyin.replace('ˇ', ''); }
+                else if (zhuyin.includes('ˋ')) { tone = 'ˋ'; symbols = zhuyin.replace('ˋ', ''); }
+                let symbolHTML = symbols.split('').map(s => `<span class="zy-symbol">${s}</span>`).join('');
+                return `<span class="zy-wrap"><span class="zy-char">${char}</span><span class="zy-phonetic"><span class="zy-column">${symbolHTML}</span>${tone ? `<span class="${toneClass}">${tone}</span>` : ''}</span></span>`;
+            });
+        }
+
+        function showInstruction(gameId) {
+            const data = gameInstructions[gameId];
+            if(!data) return;
+            document.getElementById('inst-title').innerHTML = parseZhuyinText(data.title);
+            document.getElementById('inst-text').innerHTML = parseZhuyinText(data.text);
+            const btn = document.getElementById('inst-start-btn');
+            btn.innerHTML = parseZhuyinText("開(ㄎㄞ)始(ㄕˇ)"); 
+            btn.onclick = () => { closeInstruction(); data.startFunc(); };
+            document.getElementById('instruction-modal').style.display = 'flex';
+        }
+
+        function closeInstruction() { document.getElementById('instruction-modal').style.display = 'none'; }
+        
+        window.onload = function() {
+            const titleEl = document.getElementById('app-title');
+            titleEl.innerHTML = parseZhuyinText("注(ㄓㄨˋ)音(ㄧㄣ)學(ㄒㄩㄝˊ)習(ㄒㄧˊ)大(ㄉㄚˋ)冒(ㄇㄠˋ)險(ㄒㄧㄢˇ)");
+            const menuItems = document.querySelectorAll('.menu-text');
+            menuItems.forEach(el => { el.innerHTML = parseZhuyinText(el.innerHTML); });
+            goHome();
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && document.getElementById('fps-screen').style.display !== 'none' && !isGamePaused) {
+                    activateAwakening();
+                }
+            });
+        };
+
+        // --- 音效系統修復版 ---
+        let audioCtx;
+        let isAudioUnlocked = false;
+
+        function initAudio() { 
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (!isAudioUnlocked && audioCtx.state !== 'running') {
+                audioCtx.resume().then(() => {
+                    isAudioUnlocked = true;
+                });
+                const buffer = audioCtx.createBuffer(1, 1, 22050);
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(0);
+                isAudioUnlocked = true;
+            }
+        }
+
+        document.addEventListener('touchstart', function() { initAudio(); }, {once:true, passive: false});
+        document.addEventListener('click', function() { initAudio(); }, {once:true});
+
+        function playTone(freq, type='sine', duration=0.2) { 
+            initAudio(); 
+            if(audioCtx.state === 'suspended') audioCtx.resume(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = type; 
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime); 
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration); 
+            osc.connect(gain); 
+            gain.connect(audioCtx.destination); 
+            osc.start(); 
+            osc.stop(audioCtx.currentTime + duration); 
+        }
+
+        function playErrorSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth'; 
+            osc.frequency.setValueAtTime(100, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime); 
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3); 
+        }
+
+        function playAttackSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = 'sawtooth'; 
+            osc.frequency.setValueAtTime(1000, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); 
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime); 
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1); 
+        }
+
+        function playHitSound() { playTone(100, 'sawtooth', 0.1); }
+
+        function playExplosionSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = 'square'; 
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.4); 
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime); 
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.start(); osc.stop(audioCtx.currentTime + 0.4); 
+        }
+
+        function playHealSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = 'sine'; 
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime); 
+            osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.3); 
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3); 
+        }
+
+        function playPowerUpSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = 'triangle'; 
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.5); 
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime); 
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); 
+            osc.connect(gain); gain.connect(audioCtx.destination); 
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5); 
+        }
+        
+        function playSuccessSound() { 
+            initAudio(); 
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain(); 
+            osc.type = 'sine'; 
+            osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime); 
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); 
+            osc.connect(gain); 
+            gain.connect(audioCtx.destination); 
+            osc.start(); 
+            osc.stop(audioCtx.currentTime + 0.3); 
+        }
+
+        // --- 全域變數 ---
+        let currentLevel=1, gameMode=1, currentTarget='', currentTargetChar='', currentTargetZhuyin='';
+        let audioInterval=null, isProcessing=false;
+        
+        // 拼音與LV3狀態
+        let pinyinMain=[], pinyinTone='', lv3Slots={initial:'',medial:'',final:''}, piSlots={initial:'',medial:'',final:''};
+        let lv3MistakeCount = 0; 
+        const synth = window.speechSynthesis;
+        
+        // Battle 狀態
+        let gridState=[], battleScore=0, monsterHP=100, selectedTiles=[], idleTimer=0, hintInterval=null, isAnimating=false;
+        let isSwiping = false; 
+
+        // FPS 狀態
+        let fpsScore=0, fpsTarget='', fpsEnemies=[], fpsLoopId=null, lastTime=0, spawnTimer=0;
+        let fpsBossActive=false, fpsBossLevel=1, nextBossThreshold=100, fpsBossObj=null; 
+        let bossSatellitesCount=0, bossTotalSatellites=0, bossCoreMaxHP=0, bossCoreCurrentHP=0, shakeIntensity=0;
+        let bossVulnerableTimer=0, bossShieldRotation=0;
+        let activeTraps = []; 
+        let isGamePaused = false;
+        let playerHP = 100; const maxPlayerHP = 100;
+        let playerSP = 0; const maxSP = 10;
+        let isAwakened = false; let awakeningTimer = 0; 
+        let isHoldingTrigger = false; let lastAutoShotTime = 0;
+
+        function speak(text, stopPrevious = true) { 
+            if(stopPrevious) synth.cancel(); 
+            const u=new SpeechSynthesisUtterance(text); 
+            u.lang='zh-TW'; 
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            u.rate = isMobile ? 1.0 : 1.5; 
+            synth.speak(u); 
+            return u;
+        }
+        
+        function hideAllScreens() {
+            ['menu-screen','game-screen','practice-screen','pinyin-screen','lv3-screen','battle-screen','fps-screen', 'congrats-modal', 'instruction-modal', 'leaderboard-modal', 'fps-pause-modal'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.style.display='none';
+            });
+            if(audioInterval) clearInterval(audioInterval);
+            if(hintInterval) clearInterval(hintInterval);
+            if(fpsLoopId) { cancelAnimationFrame(fpsLoopId); fpsLoopId=null; }
+            const s=document.getElementById('fps-screen');
+            if(s){
+                document.removeEventListener('pointerdown', onGlobalPointerDown);
+                document.removeEventListener('pointerup', onGlobalPointerUp);
+                s.removeEventListener('mousemove',handleInput); 
+                s.removeEventListener('touchmove',handleInput); 
+            }
+        }
+        function goHome() { hideAllScreens(); document.getElementById('menu-screen').style.display='flex'; }
+
+        // --- Battle Mode ---
+        let battlePool=[]; 
+        let firstSelected=null; 
+        let isSwapping=false;
+        const tileColors = ['#FFADAD', '#FFD6A5', '#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF'];
+        let battleColorMap = {};
+
+        function startBattle(){
+            hideAllScreens();
+            document.getElementById('battle-screen').style.display='flex';
+            battleScore=0;
+            monsterHP=100;
+            isAnimating=false;
+            firstSelected=null;
+            document.getElementById('battle-score').innerText=0;
+            document.getElementById('monster-hp').style.width="100%";
+            document.getElementById('monster').innerText=['🦖','👾','🐉','👹'][Math.floor(Math.random()*4)];
+            document.getElementById('monster').classList.remove('hit');
+            
+            initBattlePool();
+            initGridWithCheck();
+            startHintTimer();
+        }
+
+        function initBattlePool(){
+            let temp=[...zhuyinAll];
+            temp.sort(()=>Math.random()-0.5);
+            battlePool=temp.slice(0,8);
+            battleColorMap = {};
+            let shuffledColors = [...tileColors].sort(()=>Math.random()-0.5);
+            battlePool.forEach((char, index) => {
+                battleColorMap[char] = shuffledColors[index % shuffledColors.length];
+            });
+        }
+
+        function initGridWithCheck(){
+            let attempts=0;
+            do{
+                generateRandomGrid();
+                removeInitialMatches();
+            } while(getPossibleMoves()<3 && attempts++<50);
+            renderGrid();
+            if(getPossibleMoves()===0) triggerEarthquake();
+        }
+
+        function generateRandomGrid(){
+            gridState=[];
+            for(let r=0;r<6;r++){
+                let row=[];
+                for(let c=0;c<6;c++){
+                    row.push(createNewTile());
+                }
+                gridState.push(row);
+            }
+        }
+
+        function createNewTile(){
+            let char=battlePool[Math.floor(Math.random()*battlePool.length)];
+            return {
+                char: char,
+                id: Math.random().toString(36).substr(2,9)
+            };
+        }
+
+        function removeInitialMatches(){
+            for(let r=0;r<6;r++){
+                for(let c=0;c<6;c++){
+                    let char=gridState[r][c].char;
+                    if(c>=2 && gridState[r][c-1].char===char && gridState[r][c-2].char===char){
+                        do{ gridState[r][c]=createNewTile(); } while(gridState[r][c].char===char);
+                    }
+                    if(r>=2 && gridState[r-1][c].char===char && gridState[r-2][c].char===char){
+                        do{ gridState[r][c]=createNewTile(); } while(gridState[r][c].char===char);
+                    }
+                }
+            }
+        }
+
+        function renderGrid(){
+            const con=document.getElementById('battle-grid');
+            con.innerHTML='';
+            
+            if(!document.getElementById('earthquake-overlay')){
+                let div=document.createElement('div');
+                div.id='earthquake-overlay';
+                div.innerText='🌋 地震重組中！';
+                con.appendChild(div);
+            } else {
+                document.getElementById('earthquake-overlay').style.display='none';
+            }
+
+            for(let r=0;r<6;r++){
+                for(let c=0;c<6;c++){
+                    let td=gridState[r][c];
+                    let el=document.createElement('div');
+                    el.className='grid-tile';
+                    el.innerText=td.char;
+                    el.dataset.r=r;
+                    el.dataset.c=c;
+                    el.id=`tile-${r}-${c}`;
+                    el.style.left=(c*16.6)+'%';
+                    el.style.top=(r*16.6)+'%';
+                    
+                    if(battleColorMap[td.char]) {
+                        el.style.backgroundColor = battleColorMap[td.char];
+                    }
+                    
+                    el.onclick=()=>handleTileClick(r,c,el);
+                    con.appendChild(el);
+                }
+            }
+        }
+
+        function handleTileClick(r,c,el){
+            if(isAnimating||isSwapping) return;
+            resetIdle(); 
+
+            if(!firstSelected){
+                firstSelected={r,c,el};
+                el.classList.add('selected');
+                speak(gridState[r][c].char);
+                return;
+            }
+            if(firstSelected.r===r && firstSelected.c===c){
+                el.classList.remove('selected');
+                firstSelected=null;
+                return;
+            }
+            let dr=Math.abs(firstSelected.r-r);
+            let dc=Math.abs(firstSelected.c-c);
+            
+            if(dr+dc===1){
+                firstSelected.el.classList.remove('selected');
+                swapTiles(firstSelected.r, firstSelected.c, r, c);
+                firstSelected=null;
+            } else {
+                firstSelected.el.classList.remove('selected');
+                firstSelected={r,c,el};
+                el.classList.add('selected');
+                speak(gridState[r][c].char);
+            }
+        }
+
+        function swapTiles(r1,c1,r2,c2){
+            isSwapping=true;
+            const el1=document.getElementById(`tile-${r1}-${c1}`);
+            const el2=document.getElementById(`tile-${r2}-${c2}`);
+            
+            el1.style.top=(r2*16.6)+'%'; el1.style.left=(c2*16.6)+'%';
+            el2.style.top=(r1*16.6)+'%'; el2.style.left=(c1*16.6)+'%';
+            
+            setTimeout(()=>{
+                let temp=gridState[r1][c1];
+                gridState[r1][c1]=gridState[r2][c2];
+                gridState[r2][c2]=temp;
+                
+                renderGrid(); 
+                
+                let matches=findMatches();
+                if(matches.length>0){
+                    processMatches(matches);
+                } else {
+                    playErrorSound();
+                    setTimeout(()=>{
+                        let tempBack=gridState[r1][c1];
+                        gridState[r1][c1]=gridState[r2][c2];
+                        gridState[r2][c2]=tempBack;
+                        renderGrid();
+                        isSwapping=false;
+                    }, 200);
+                }
+            }, 250);
+        }
+
+        function findMatches(){
+            let matchedSet=new Set();
+            for(let r=0;r<6;r++){
+                for(let c=0;c<4;c++){
+                    let char=gridState[r][c].char;
+                    let matchLen=1;
+                    while(c+matchLen<6 && gridState[r][c+matchLen].char===char){ matchLen++; }
+                    if(matchLen>=3){
+                        for(let k=0;k<matchLen;k++) matchedSet.add(`${r},${c+k}`);
+                        c+=matchLen-1;
+                    }
+                }
+            }
+            for(let c=0;c<6;c++){
+                for(let r=0;r<4;r++){
+                    let char=gridState[r][c].char;
+                    let matchLen=1;
+                    while(r+matchLen<6 && gridState[r+matchLen][c].char===char){ matchLen++; }
+                    if(matchLen>=3){
+                        for(let k=0;k<matchLen;k++) matchedSet.add(`${r+k},${c}`);
+                        r+=matchLen-1;
+                    }
+                }
+            }
+            return Array.from(matchedSet).map(str=>{
+                let[r,c]=str.split(',').map(Number);
+                return{r,c};
+            });
+        }
+
+        function processMatches(matches){
+            isAnimating=true;
+            matches.forEach(m=>{
+                let el=document.getElementById(`tile-${m.r}-${m.c}`);
+                if(el) el.classList.add('matched');
+                gridState[m.r][m.c]=null;
+            });
+            let dmg=matches.length*5;
+            if(matches.length>=4) dmg*=1.5;
+            if(matches.length>=5) dmg*=2;
+            attackMonster(Math.floor(dmg));
+            
+            setTimeout(()=>{ applyGravity(); }, 300);
+        }
+
+        function applyGravity(){
+            for(let c=0;c<6;c++){
+                let newCol=[];
+                for(let r=0;r<6;r++){
+                    if(gridState[r][c]!==null){
+                        newCol.push(gridState[r][c]);
+                    }
+                }
+                let emptyCount=6-newCol.length;
+                for(let k=0;k<emptyCount;k++){
+                    newCol.unshift(createNewTile());
+                }
+                for(let r=0;r<6;r++){
+                    gridState[r][c]=newCol[r];
+                }
+            }
+            renderGrid();
+            
+            setTimeout(()=>{
+                let newMatches=findMatches();
+                if(newMatches.length>0){
+                    playTone(400+(battleScore%500),'sine',0.1);
+                    processMatches(newMatches);
+                } else {
+                    isAnimating=false;
+                    isSwapping=false;
+                    if(getPossibleMoves()===0){
+                        setTimeout(triggerEarthquake, 500);
+                    }
+                    startHintTimer(); 
+                }
+            }, 400);
+        }
+
+        function getPossibleMoves(){
+            let moves=0;
+            for(let r=0;r<6;r++){
+                for(let c=0;c<5;c++){
+                    let t1=gridState[r][c], t2=gridState[r][c+1];
+                    gridState[r][c]=t2; gridState[r][c+1]=t1;
+                    if(findMatches().length>0) moves++;
+                    gridState[r][c]=t1; gridState[r][c+1]=t2;
+                }
+            }
+            for(let r=0;r<5;r++){
+                for(let c=0;c<6;c++){
+                    let t1=gridState[r][c], t2=gridState[r+1][c];
+                    gridState[r][c]=t2; gridState[r+1][c]=t1;
+                    if(findMatches().length>0) moves++;
+                    gridState[r][c]=t1; gridState[r+1][c]=t2;
+                }
+            }
+            return moves;
+        }
+
+        function triggerEarthquake(){
+            if(isAnimating) return;
+            isAnimating=true;
+            const overlay=document.getElementById('earthquake-overlay');
+            if(overlay) overlay.style.display='flex';
+            const s=document.getElementById('battle-screen');
+            s.classList.add('quake');
+            playErrorSound();
+            
+            setTimeout(()=>{
+                s.classList.remove('quake');
+                initGridWithCheck();
+                isAnimating=false;
+                startHintTimer();
+            }, 1000);
+        }
+
+        function startHintTimer(){
+            idleTimer=0;
+            if(hintInterval) clearInterval(hintInterval);
+            hintInterval=setInterval(()=>{
+                idleTimer++;
+                if(idleTimer>=5 && !isAnimating && !isSwapping) showHint();
+            }, 1000);
+        }
+
+        function resetIdle(){
+            idleTimer=0;
+            document.querySelectorAll('.grid-tile').forEach(t=>t.classList.remove('hint-anim'));
+        }
+
+        function showHint(){
+            for(let r=0;r<6;r++){
+                for(let c=0;c<5;c++){
+                    let t1=gridState[r][c], t2=gridState[r][c+1];
+                    gridState[r][c]=t2; gridState[r][c+1]=t1;
+                    if(findMatches().length>0){
+                        gridState[r][c]=t1; gridState[r][c+1]=t2;
+                        let e1 = document.getElementById(`tile-${r}-${c}`);
+                        let e2 = document.getElementById(`tile-${r}-${c+1}`);
+                        if(e1) e1.classList.add('hint-anim');
+                        if(e2) e2.classList.add('hint-anim');
+                        return;
+                    }
+                    gridState[r][c]=t1; gridState[r][c+1]=t2;
+                }
+            }
+            for(let r=0;r<5;r++){
+                for(let c=0;c<6;c++){
+                    let t1=gridState[r][c], t2=gridState[r+1][c];
+                    gridState[r][c]=t2; gridState[r+1][c]=t1;
+                    if(findMatches().length>0){
+                        gridState[r][c]=t1; gridState[r+1][c]=t2;
+                        let e1 = document.getElementById(`tile-${r}-${c}`);
+                        let e2 = document.getElementById(`tile-${r+1}-${c}`);
+                        if(e1) e1.classList.add('hint-anim');
+                        if(e2) e2.classList.add('hint-anim');
+                        return;
+                    }
+                    gridState[r][c]=t1; gridState[r+1][c]=t2;
+                }
+            }
+        }
+
+        function attackMonster(dmg){
+            playAttackSound();
+            const b=document.createElement('div');
+            b.className='projectile';
+            b.innerText='🔥';
+            let sx=window.innerWidth/2, sy=window.innerHeight/2+100;
+            let e=document.getElementById('monster').getBoundingClientRect();
+            b.style.left=sx+'px';
+            b.style.top=sy+'px';
+            document.body.appendChild(b);
+            
+            requestAnimationFrame(()=>{
+                b.style.left=(e.left+e.width/2)+'px';
+                b.style.top=(e.top+e.height/2)+'px';
+            });
+            
+            setTimeout(()=>{
+                b.remove();
+                const m=document.getElementById('monster');
+                m.classList.add('hit');
+                playHitSound();
+                setTimeout(()=>m.classList.remove('hit'),400);
+                
+                monsterHP-=dmg;
+                battleScore+=dmg*10;
+                document.getElementById('battle-score').innerText=battleScore;
+                document.getElementById('monster-hp').style.width=Math.max(0,monsterHP)+"%";
+                
+                if(monsterHP<=0){
+                    alert("勝利！怪物已擊敗！");
+                    monsterHP=100;
+                    document.getElementById('monster-hp').style.width="100%";
+                    triggerEarthquake();
+                }
+            }, 400);
+        }
+
+        // --- FPS Engine ---
+        function startFPS() {
+            hideAllScreens(); initAudio(); document.getElementById('fps-screen').style.display='block';
+            fpsScore=0; fpsEnemies=[]; fpsBossActive=false; fpsBossLevel=1; nextBossThreshold=100; fpsBossObj=null; shakeIntensity=0;
+            playerHP = 100; updatePlayerHP(0); playerSP = 0; updatePlayerSP(0); activeTraps = []; isAwakened = false; awakeningTimer = 0; isGamePaused = false;
+            document.getElementById('fps-gun-inner').classList.remove('weapon-gold');
+            document.getElementById('fps-sp-fill').classList.remove('awakening');
+            document.getElementById('fps-awake-btn').classList.remove('active');
+            document.getElementById('fps-score').innerText=fpsScore;
+            document.getElementById('fps-world').innerHTML='<div class="fps-floor"></div>';
+            document.getElementById('boss-hud').style.display='none';
+            document.getElementById('boss-timer-display').style.display='none';
+            document.getElementById('fps-world').style.transform='translateZ(0)';
+            const s=document.getElementById('fps-screen');
+            s.removeEventListener('mousemove',handleInput); 
+            s.removeEventListener('touchmove',handleInput); 
+            s.addEventListener('mousemove',handleInput); 
+            s.addEventListener('touchmove',handleInput,{passive:false}); 
+            document.addEventListener('pointerdown', onGlobalPointerDown);
+            document.addEventListener('pointerup', onGlobalPointerUp);
+            document.getElementById('warp-container').innerHTML = '';
+            initWarpLines();
+            setFPSTarget(); lastTime=performance.now(); fpsLoopId=requestAnimationFrame(fpsLoop);
+        }
+        function initWarpLines() { const container = document.getElementById('warp-container'); container.innerHTML = ''; for(let i=0; i<15; i++) { let line = document.createElement('div'); line.className = 'warp-line'; let angle = Math.random() * 360; line.style.setProperty('--angle', angle + 'deg'); line.style.animation = `warpMove ${0.5 + Math.random()}s infinite linear ${Math.random()}s`; container.appendChild(line); } }
+        function handleInput(e) { e.preventDefault(); const x=e.clientX||e.touches[0].clientX; const y=e.clientY||e.touches[0].clientY; const c=document.querySelector('.fps-crosshair'); c.style.left=x+'px'; c.style.top=y+'px'; const p=document.getElementById('fps-gun-pivot'); const ay=-(x-window.innerWidth/2)/10; let ap=45+(y-window.innerHeight/2)/10; if(ap<-10)ap=-10; p.style.transform=`rotateY(${ay}deg) rotateX(${ap}deg)`; }
+        function onGlobalPointerDown(e) { if(e.target.closest('#fps-awake-btn') || e.target.closest('.pause-btn')) return; if(!isGamePaused) fireWeapon(e); if(isAwakened) isHoldingTrigger = true; }
+        function onGlobalPointerUp(e) { isHoldingTrigger = false; }
+        
+        // 修復此處被截斷的程式碼
+        function fireWeapon(e) { 
+            if(playerHP<=0 || isGamePaused) return; 
+            const i=document.getElementById('fps-gun-inner'); 
+            i.classList.remove('firing'); 
+            void i.offsetWidth; 
+            i.classList.add('firing'); 
+            playAttackSound(); 
+            let x, y; 
+            if(e && e.touches && e.touches.length > 0) { 
+                x = e.touches[0].clientX; 
+                y = e.touches[0].clientY; 
+            } else if (e && e.clientX !== undefined) { 
+                x = e.clientX; 
+                y = e.clientY; 
+            } else { 
+                const c = document.querySelector('.fps-crosshair'); 
+                if(c) { 
+                    const rect = c.getBoundingClientRect(); 
+                    x = rect.left + rect.width/2; 
+                    y = rect.top + rect.height/2; 
+                } 
+            } 
+            if(x !== undefined && y !== undefined) { 
+                createBeam(x, y); 
+                checkLaserHit(x, y); 
+            } 
+        }
+
+        function createBeam(tx,ty) { const b=document.createElement('div'); b.className='fps-beam'; const r=document.querySelector('.gun-barrel-L').getBoundingClientRect(); const sx=r.left+r.width/2; const sy=r.top; const dx=tx-sx; const dy=ty-sy; const d=Math.sqrt(dx*dx+dy*dy); const a=Math.atan2(dy,dx)*180/Math.PI; b.style.width=d+'px'; b.style.left=sx+'px'; b.style.top=sy+'px'; b.style.transform=`rotate(${a}deg)`; document.getElementById('fps-screen').appendChild(b); requestAnimationFrame(()=>{b.style.opacity=0;}); setTimeout(()=>b.remove(),150); }
+        function checkLaserHit(x, y) { let element = document.elementFromPoint(x, y); if (!element) return; let target = element.closest('.fps-enemy, .fps-boss-core, .fps-satellite'); if (target) { if (target.classList.contains('fps-boss-core')) { if(target.classList.contains('shielded')){ playErrorSound(); shakeScreen(3); } else { bossCoreCurrentHP--; playHitSound(); shakeScreen(5); document.getElementById('boss-hp-fill').style.width=`${(bossCoreCurrentHP/bossCoreMaxHP)*100}%`; if(bossCoreCurrentHP<=0) bossDefeated(); } } else if (target.classList.contains('fps-satellite')) { let chp = parseInt(target.dataset.hp); let mt = target.dataset.type; if(mt==='trap'){ playErrorSound(); shakeScreen(20); updatePlayerHP(-15); target.remove(); } else { chp--; target.dataset.hp = chp; shakeScreen(5); if(mt==='elite'){ target.style.filter=`brightness(${0.5+chp/3})`; playHitSound(); } if(chp<=0){ if(target.innerText !== '💣') speak(target.innerText); updatePlayerSP(1); playExplosionSound(); createExplosion(0,0,-2000); target.remove(); bossSatellitesCount--; updateShieldBar(); if(bossSatellitesCount<=0) activateBossPhase2(document.querySelector('.fps-boss-core')); } else { target.classList.add('hurt'); setTimeout(()=>target.classList.remove('hurt'),100); } } } else if (target.classList.contains('fps-enemy')) { hitEnemy(target); } } }
+        function toggleFPSPause() { isGamePaused = !isGamePaused; const modal = document.getElementById('fps-pause-modal'); if(isGamePaused) { modal.style.display = 'flex'; if(fpsLoopId) cancelAnimationFrame(fpsLoopId); } else { modal.style.display = 'none'; lastTime = performance.now(); fpsLoopId = requestAnimationFrame(fpsLoop); } }
+        function spawnFPSEnemy(isTrapOverride = false) { if(fpsBossActive && !isTrapOverride) return; let el=document.createElement('div'); el.className='fps-enemy'; let isTrap = isTrapOverride || (Math.random() < 0.2); let char; if (isTrap) { el.classList.add('trap'); char = '💣'; } else { char = (Math.random()<0.4) ? fpsTarget : zhuyinAll[Math.floor(Math.random()*zhuyinAll.length)]; } let d=document.createElement('div'); d.className='fps-face front'; d.innerText=char; el.appendChild(d); let spread = isTrap ? 1800 : 1200; let x=(Math.random()-0.5)*spread, y=(Math.random()-0.5)*700, z=-4000; let patterns=['straight','spiral','wave'], pattern=patterns[Math.floor(Math.random()*patterns.length)]; el.style.transform=`translate3d(${x}px, ${y}px, ${z}px)`; document.getElementById('fps-world').appendChild(el); let enemyData = {el:el, x:x, y:y, z:z, char:char, pattern:pattern, isTrap: isTrap}; fpsEnemies.push(enemyData); if(isTrap) { activeTraps.push(enemyData); if(activeTraps.length > 6) { let oldTrap = activeTraps.shift(); let mainIdx = fpsEnemies.indexOf(oldTrap); if(mainIdx !== -1) fpsEnemies.splice(mainIdx, 1); if(oldTrap.el) oldTrap.el.remove(); } } }
+        function hitEnemy(el) { let idx = fpsEnemies.findIndex(i=>i.el===el); if(idx!==-1){ let ed=fpsEnemies[idx]; if (ed.isTrap) { playErrorSound(); updatePlayerHP(-15); updateScore(-10); createExplosion(ed.x,ed.y,ed.z); let tIdx = activeTraps.findIndex(t => t.el === el); if(tIdx !== -1) activeTraps.splice(tIdx, 1); } else if(ed.char===fpsTarget){ playExplosionSound(); updateScore(10); updatePlayerSP(1); createExplosion(ed.x,ed.y,ed.z); document.getElementById('fps-hit-fx').classList.add('active'); setTimeout(()=>document.getElementById('fps-hit-fx').classList.remove('active'),100); setFPSTarget(); } else { playErrorSound(); updatePlayerHP(-10); updateScore(-5); createExplosion(ed.x,ed.y,ed.z); document.getElementById('fps-miss-fx').classList.add('active'); setTimeout(()=>document.getElementById('fps-miss-fx').classList.remove('active'),100); } el.remove(); fpsEnemies.splice(idx,1); } }
+        function updateScore(val) { fpsScore+=val; if(fpsScore < 0) fpsScore = 0; document.getElementById('fps-score').innerText=fpsScore; if(fpsScore>=nextBossThreshold && !fpsBossActive) spawnFPSBoss(); }
+        function updatePlayerHP(amount) { playerHP += amount; if (playerHP > maxPlayerHP) playerHP = maxPlayerHP; if (playerHP < 0) playerHP = 0; let pct = (playerHP / maxPlayerHP) * 100; document.getElementById('fps-hp-fill').style.width = pct + '%'; document.getElementById('fps-hp-text').innerText = `${Math.ceil(playerHP)}/${maxPlayerHP}`; if (amount < 0) { document.getElementById('fps-screen').classList.add('screen-flash-red'); setTimeout(() => document.getElementById('fps-screen').classList.remove('screen-flash-red'), 300); } else if (amount > 0) { document.getElementById('fps-screen').classList.add('screen-flash-green'); setTimeout(() => document.getElementById('fps-screen').classList.remove('screen-flash-green'), 300); } if (playerHP <= 0) { checkGameOver(); } }
+        function updatePlayerSP(amount) { if(isAwakened) return; playerSP += amount; if(playerSP > maxSP) playerSP = maxSP; let pct = (playerSP / maxSP) * 100; document.getElementById('fps-sp-fill').style.width = pct + '%'; const btn = document.getElementById('fps-awake-btn'); if(playerSP >= maxSP) { btn.classList.add('ready'); } else { btn.classList.remove('ready'); } }
+        function activateAwakening() { if(playerSP < maxSP || isAwakened) return; isAwakened = true; playerSP = 0; updatePlayerSP(0); awakeningTimer = 10000; playPowerUpSound(); speak("覺醒爆發"); document.getElementById('fps-gun-inner').classList.add('weapon-gold'); document.getElementById('fps-sp-fill').classList.add('awakening'); document.getElementById('fps-awake-btn').classList.remove('ready'); document.getElementById('fps-awake-btn').classList.add('active'); }
+        function deactivateAwakening() { isAwakened = false; document.getElementById('fps-gun-inner').classList.remove('weapon-gold'); document.getElementById('fps-sp-fill').classList.remove('awakening'); document.getElementById('fps-awake-btn').classList.remove('active'); speak("覺醒結束"); }
+        function checkGameOver() { if (fpsLoopId) { cancelAnimationFrame(fpsLoopId); fpsLoopId=null; } playErrorSound(); speak("遊戲結束"); saveHighScore(fpsScore); showLeaderboard(); }
+        function saveHighScore(score) { let scores = JSON.parse(localStorage.getItem('zhuyin_fps_scores')) || []; let date = new Date().toLocaleDateString(); scores.push({ score: score, date: date }); scores.sort((a, b) => b.score - a.score); scores = scores.slice(0, 10); localStorage.setItem('zhuyin_fps_scores', JSON.stringify(scores)); }
+        function showLeaderboard() { document.getElementById('leaderboard-modal').style.display = 'flex'; document.getElementById('final-score').innerText = fpsScore; let scores = JSON.parse(localStorage.getItem('zhuyin_fps_scores')) || []; let tbody = document.querySelector('#lb-table tbody'); tbody.innerHTML = ''; scores.forEach((s, index) => { let rankClass = index < 3 ? `lb-rank-${index+1}` : ''; let tr = document.createElement('tr'); tr.innerHTML = `<td class="${rankClass}">${index + 1}</td><td class="${rankClass}">${s.score}</td><td>${s.date}</td>`; tbody.appendChild(tr); }); }
+        function closeLeaderboard() { document.getElementById('leaderboard-modal').style.display = 'none'; startFPS(); }
+        function spawnFPSBoss() { fpsBossActive=true; nextBossThreshold+=100; fpsEnemies.forEach(e=>e.el.remove()); fpsEnemies=[]; activeTraps = []; let bc=document.createElement('div'); bc.className='fps-boss-container'; bc.style.transform=`translate3d(0, 0, -3000px)`; let sc=document.createElement('div'); sc.className='fps-shield-container'; bc.appendChild(sc); let face=document.createElement('div'); face.className='fps-boss-core shielded'; let bossChar=zhuyinAll[Math.floor(Math.random()*zhuyinAll.length)]; face.innerText=bossChar; bc.appendChild(face); fpsTarget=bossChar; fpsBossObj={el:bc, shieldEl:sc, faceEl:face, x:0, y:0, z:-3000, time:0, char: bossChar}; generateShield(); document.getElementById('fps-world').appendChild(bc); document.getElementById('boss-hud').style.display='flex'; document.getElementById('boss-track').classList.remove('vulnerable'); speak("警告，巨型怪物出現"); shakeScreen(15); }
+        function generateShield() { if(!fpsBossObj) return; const sc = fpsBossObj.shieldEl; sc.innerHTML = ''; const face = fpsBossObj.faceEl; face.classList.remove('vulnerable'); face.classList.add('shielded'); document.getElementById('boss-track').classList.remove('vulnerable'); document.getElementById('fps-target-display').innerText=`目標: 破壞護盾方塊!`; bossSatellitesCount=0; bossTotalSatellites=0; let count=5+fpsBossLevel; let bossChar = fpsBossObj.char; for(let i=0; i<count; i++){ let sat=document.createElement('div'); let type='normal', hp=1, char=bossChar; let r=Math.random(); if(fpsBossLevel>=2 && r<0.3){type='elite';hp=3;} else if(fpsBossLevel>=3 && r>0.85){ type='trap'; hp=1; char='💣'; } if(type!=='trap') bossSatellitesCount++; sat.className=`fps-satellite ${type}`; sat.innerText=char; sat.dataset.hp=hp; sat.dataset.type=type; let angle=(i/count)*Math.PI*2, rad=420, sx=Math.cos(angle)*rad, sy=Math.sin(angle)*rad; sat.style.transform=`translate3d(${sx}px, ${sy}px, 0px)`; sc.appendChild(sat); } bossTotalSatellites=bossSatellitesCount; if(bossCoreMaxHP === 0) { bossCoreMaxHP=15+(fpsBossLevel*5); bossCoreCurrentHP=bossCoreMaxHP; } updateShieldBar(); }
+        function updateShieldBar() { document.getElementById('boss-hp-fill').style.width=`${(bossSatellitesCount/bossTotalSatellites)*100}%`; }
+        function activateBossPhase2(face) { face.classList.remove('shielded'); face.classList.add('vulnerable'); document.getElementById('boss-track').classList.add('vulnerable'); document.getElementById('boss-hp-fill').style.width='100%'; document.getElementById('fps-target-display').innerText=`目標: 攻擊本體!`; speak("護盾擊破，攻擊本體"); shakeScreen(30); const f=document.getElementById('fps-flash-fx'); f.classList.add('active'); setTimeout(()=>f.classList.remove('active'),200); bossVulnerableTimer = 5; document.getElementById('boss-timer-display').style.display = 'block'; document.getElementById('boss-timer-display').innerText = bossVulnerableTimer; }
+        function respawnShield() { if(!fpsBossActive || !fpsBossObj) return; document.getElementById('boss-timer-display').style.display = 'none'; speak("護盾重生"); playErrorSound(); generateShield(); }
+        function bossDefeated() { playExplosionSound(); playHealSound(); shakeScreen(100); createMassiveDebris(0,0,-2500); const f=document.getElementById('fps-flash-fx'); f.classList.add('active'); setTimeout(()=>f.classList.remove('active'),800); updatePlayerHP(30); activeTraps.forEach(t => { createExplosion(t.x, t.y, t.z); if(t.el) t.el.remove(); let idx = fpsEnemies.indexOf(t); if(idx !== -1) fpsEnemies.splice(idx, 1); }); activeTraps = []; if(fpsBossObj && fpsBossObj.el) fpsBossObj.el.remove(); fpsBossObj=null; fpsBossActive=false; fpsBossLevel++; document.getElementById('boss-hud').style.display='none'; document.getElementById('boss-timer-display').style.display='none'; bossCoreMaxHP = 0; speak("恭喜擊敗怪物，進入下一關"); setTimeout(()=>{setFPSTarget();},3000); }
+        function shakeScreen(i) { shakeIntensity=i; }
+        function createExplosion(x,y,z) { for(let i=0;i<20;i++){ let p=document.createElement('div'); p.className='fps-particle'; p.style.transform=`translate3d(${x}px,${y}px,${z}px)`; document.getElementById('fps-world').appendChild(p); let dx=x+(Math.random()-0.5)*600, dy=y+(Math.random()-0.5)*600, dz=z+(Math.random()-0.5)*600; p.animate([{transform:`translate3d(${x}px,${y}px,${z}px) scale(1)`,opacity:1},{transform:`translate3d(${dx}px,${dy}px,${dz}px) scale(0)`,opacity:0}],{duration:500,easing:'ease-out'}).onfinish=()=>p.remove(); } }
+        function createMassiveDebris(x,y,z) { for(let i=0;i<60;i++){ let p=document.createElement('div'); p.className='debris-particle'; p.style.backgroundColor=['#ff0000','#ff9900','#ffff00','#333'][Math.floor(Math.random()*4)]; p.style.transform=`translate3d(${x}px,${y}px,${z}px)`; document.getElementById('fps-world').appendChild(p); let dx=x+(Math.random()-0.5)*2500, dy=y+(Math.random()-0.5)*2500, dz=z+(Math.random()-0.5)*2500, rx=Math.random()*720, ry=Math.random()*720; p.animate([{transform:`translate3d(${x}px,${y}px,${z}px) rotateX(0deg) rotateY(0deg) scale(1)`,opacity:1},{transform:`translate3d(${dx}px,${dy}px,${dz}px) rotateX(${rx}deg) rotateY(${ry}deg) scale(0)`,opacity:0}],{duration:1500,easing:'cubic-bezier(0.1, 0.9, 0.2, 1)'}).onfinish=()=>p.remove(); } }
+        function setFPSTarget() { fpsTarget=zhuyinAll[Math.floor(Math.random()*zhuyinAll.length)]; document.getElementById('fps-target-display').innerText=`目標: ${fpsTarget}`; speak("打 "+fpsTarget); }
+        function fpsLoop(ts) { if(isGamePaused) { lastTime = ts; fpsLoopId=requestAnimationFrame(fpsLoop); return; } let dt=ts-lastTime; lastTime=ts; if(shakeIntensity>0){ let sx=(Math.random()-0.5)*shakeIntensity*2, sy=(Math.random()-0.5)*shakeIntensity*2; document.getElementById('fps-world').style.transform=`translate3d(${sx}px,${sy}px,0)`; shakeIntensity*=0.9; if(shakeIntensity<0.5){shakeIntensity=0; document.getElementById('fps-world').style.transform=`translate3d(0,0,0)`;} } if(isAwakened) { awakeningTimer -= dt; if(awakeningTimer <= 0) { deactivateAwakening(); } else { if((isHoldingTrigger || document.getElementById('fps-awake-btn').classList.contains('active')) && (ts - lastAutoShotTime > 200)) { lastAutoShotTime = ts; fireWeapon(); } } } if(fpsBossActive && fpsBossObj){ let speedMult = 1 + (fpsBossLevel * 0.1); let rangeMult = 1 + (fpsBossLevel * 0.15); fpsBossObj.time += dt*0.002 * speedMult; let nx=Math.sin(fpsBossObj.time)*300 * rangeMult; let ny=Math.cos(fpsBossObj.time*0.7)*150 * rangeMult; if(fpsBossObj.z<-1500) fpsBossObj.z+=dt*0.1; fpsBossObj.el.style.transform=`translate3d(${nx}px,${ny}px,${fpsBossObj.z}px) rotateZ(${Math.sin(fpsBossObj.time*0.5)*5}deg)`; if (fpsBossLevel >= 5) { let rotSpeed = (fpsBossLevel - 4) * 0.05; if (fpsBossLevel >= 10) rotSpeed += Math.sin(ts * 0.002) * 0.2; bossShieldRotation += rotSpeed * (dt/16); fpsBossObj.shieldEl.style.transform = `rotateZ(${bossShieldRotation}deg)`; } spawnTimer += dt; if(spawnTimer > 4500) { spawnFPSEnemy(true); spawnTimer = 0; } if (fpsBossObj.faceEl.classList.contains('vulnerable')) { bossVulnerableTimer -= dt/1000; if (bossVulnerableTimer > 0) { document.getElementById('boss-timer-display').innerText = Math.ceil(bossVulnerableTimer); } else { respawnShield(); } } } else { spawnTimer+=dt; let rate=Math.max(500, 1500-(fpsBossLevel*100)); if(spawnTimer>rate){spawnFPSEnemy(); spawnTimer=0;} fpsEnemies.forEach((e,i)=>{ e.z+=(0.5+fpsBossLevel*0.1)*dt; let cx=e.x, cy=e.y; if(e.pattern==='spiral'){cx+=Math.cos(e.z*0.005)*150; cy+=Math.sin(e.z*0.005)*150;} else if(e.pattern==='wave'){cy+=Math.sin(e.z*0.008)*200;} e.el.style.transform=`translate3d(${cx}px,${cy}px,${e.z}px)`; if(e.z>800){ if (e.isTrap) { let tIdx = activeTraps.indexOf(e); if(tIdx !== -1) activeTraps.splice(tIdx, 1); } else if(e.char===fpsTarget){ updatePlayerHP(-5); playErrorSound(); document.getElementById('fps-miss-fx').classList.add('active'); setTimeout(()=>document.getElementById('fps-miss-fx').classList.remove('active'),100); } e.el.remove(); fpsEnemies.splice(i,1); } }); } if(playerHP > 0) fpsLoopId=requestAnimationFrame(fpsLoop); }
+
+        // --- LV1, LV2 Logic ---
+        function startGame(m){hideAllScreens();document.getElementById('game-screen').style.display='flex';gameMode=m;currentLevel=1;loadLevel();}
+        function loadLevel(){document.getElementById('level-display').innerText=`關卡: ${currentLevel}/100`;isProcessing=false;currentTarget=zhuyinAll[Math.floor(Math.random()*zhuyinAll.length)];const t=document.getElementById('target-content');if(gameMode===1){t.innerText=currentTarget;t.className='';}else{t.innerText='👂';t.className='icon';}if(audioInterval)clearInterval(audioInterval);speak(currentTarget);generateOptions();}
+        function generateOptions(){const c=document.getElementById('options-area');c.innerHTML='';let o=[currentTarget];while(o.length<Math.min(10,3+Math.floor((currentLevel-1)/10))){let r=zhuyinAll[Math.floor(Math.random()*zhuyinAll.length)];if(!o.includes(r))o.push(r);}o.sort(()=>Math.random()-0.5);o.forEach(ch=>{let t=document.createElement('div');t.className='tile';t.innerText=ch;t.setAttribute('data-char',ch);initDraggable(t);c.appendChild(t);});}
+        function initDraggable(el){let sx,sy,drag=false;function ds(e){if(isProcessing)return;e.preventDefault();drag=true;let cx=e.clientX||e.touches[0].clientX,cy=e.clientY||e.touches[0].clientY,r=el.getBoundingClientRect();sx=cx-r.left;sy=cy-r.top;el.classList.add('dragging');el.style.left=r.left+'px';el.style.top=r.top+'px';}function dm(e){if(!drag)return;e.preventDefault();let cx=e.clientX||e.touches[0].clientX,cy=e.clientY||e.touches[0].clientY;el.style.left=(cx-sx)+'px';el.style.top=(cy-sy)+'px';checkHover(cx,cy);}function de(e){if(!drag)return;drag=false;el.classList.remove('dragging');el.style.left='';el.style.top='';let cx=e.clientX||e.changedTouches[0].clientX,cy=e.clientY||e.changedTouches[0].clientY;document.getElementById('target-box').classList.remove('highlight');checkAnswer(cx,cy,el.getAttribute('data-char'));}el.addEventListener('mousedown',ds);el.addEventListener('touchstart',ds,{passive:false});window.addEventListener('mousemove',dm);window.addEventListener('touchmove',dm,{passive:false});window.addEventListener('mouseup',de);window.addEventListener('touchend',de);}
+        function checkHover(x,y){const r=document.getElementById('target-box').getBoundingClientRect();if(x>r.left&&x<r.right&&y>r.top&&y<r.bottom)document.getElementById('target-box').classList.add('highlight');else document.getElementById('target-box').classList.remove('highlight');}
+        function checkAnswer(x,y,c){const r=document.getElementById('target-box').getBoundingClientRect();if(x>r.left&&x<r.right&&y>r.top&&y<r.bottom){if(c===currentTarget){speak('答對了');handleCorrect();}else{speak('不對喔');navigator.vibrate&&navigator.vibrate(200);}}}
+        function handleCorrect(){if(isProcessing)return;isProcessing=true;if(audioInterval)clearInterval(audioInterval);document.getElementById('target-box').style.backgroundColor='#55efc4';setTimeout(()=>{document.getElementById('target-box').style.backgroundColor='#fff';},500);if(currentLevel%10===0&&currentLevel<100)setTimeout(()=>document.getElementById('congrats-modal').style.display='flex',1000);else setTimeout(()=>{currentLevel++;loadLevel();},1500);}
+        function nextPhase(){document.getElementById('congrats-modal').style.display='none';currentLevel++;if(gameMode===3)loadLevel3();else loadLevel();}
+
+        // --- LV3 Logic ---
+        function startLV3(){hideAllScreens();document.getElementById('lv3-screen').style.display='flex';gameMode=3;currentLevel=1;if(document.getElementById('lv3-keyboard').children.length===0){document.getElementById('lv3-keyboard').innerHTML=`<div class="keyboard-label">聲母</div><div class="keyboard-section" id="lv3-initials"></div><div class="keyboard-label">韻母</div><div class="keyboard-section" id="lv3-finals"></div><div class="keyboard-label">聲調</div><div class="keyboard-section" id="lv3-tones"></div>`;createKeyboard('lv3-initials',initials,addToLV3);createKeyboard('lv3-finals',finalsDisplay,addToLV3);createKeyboard('lv3-tones',['一聲','ˊ','ˇ','ˋ','˙'],addToLV3);}loadLevel3();}
+        function loadLevel3(){document.getElementById('lv3-level-display').innerText=`關卡: ${currentLevel}/100`;isProcessing=false;lv3MistakeCount=0;
+        const hints = document.querySelectorAll('.lv3-hint-overlay'); hints.forEach(el => el.remove());
+        document.getElementById('lv3-input-display').innerHTML='<div class="pinyin-main" id="lv3-pinyin-main"></div><div class="pinyin-tone" id="lv3-pinyin-tone"></div>';const q=lv3Data[Math.floor(Math.random()*lv3Data.length)];currentTargetChar=q.c;currentTargetZhuyin=q.z;document.getElementById('lv3-char').innerText=currentTargetChar;clearLV3Input();if(audioInterval)clearInterval(audioInterval);speak(currentTargetChar);}
+        
+        function addToLV3(c){
+            if(isProcessing)return;
+            const soundToSpeak = soundMap[c] || c;
+            speak(soundToSpeak);
+            if(['一聲','ˊ','ˇ','ˋ','˙'].includes(c)) pinyinTone=(c==='一聲')?'':c;
+            else if(initials.includes(c)) lv3Slots.initial=c;
+            else if(medials.includes(c)) lv3Slots.medial=c;
+            else if(pureFinals.includes(c)) lv3Slots.final=c;
+            pinyinMain=[lv3Slots.initial,lv3Slots.medial,lv3Slots.final].filter(x=>x!=='');
+            updateLV3Display();
+            if(['一聲','ˊ','ˇ','ˋ','˙'].includes(c)) {
+                handleLV3Validation(c);
+            }
+        }
+        function handleLV3Validation(toneChar) {
+            const userZhuyin = pinyinMain.join('') + pinyinTone;
+            const isCorrect = (userZhuyin === currentTargetZhuyin);
+            isProcessing = true;
+            synth.cancel();
+
+            let textToRead = "";
+            if (isCorrect) {
+                textToRead = currentTargetChar; 
+            } else {
+                const mappedChar = bopomofoMap[userZhuyin];
+                if (mappedChar) {
+                    textToRead = mappedChar; 
+                } else {
+                    textToRead = "這個音沒有字"; 
+                }
+            }
+            
+            const u = new SpeechSynthesisUtterance(textToRead);
+            u.lang = 'zh-TW';
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            u.rate = isMobile ? 1.0 : 1.5;
+            
+            u.onend = function() {
+                setTimeout(() => {
+                    if (isCorrect) {
+                        playSuccessSound(); 
+                        setTimeout(() => speak("答對了", false), 300);
+                        document.getElementById('lv3-input-display').classList.add('correct');
+                        setTimeout(() => {
+                            if(currentLevel%10===0) {
+                                document.getElementById('congrats-modal').style.display='flex';
+                            } else {
+                                currentLevel++;
+                                loadLevel3();
+                            }
+                        }, 1500);
+                    } else {
+                        playErrorSound(); 
+                        lv3MistakeCount++;
+                        const box = document.getElementById('lv3-input-display');
+                        box.classList.add('wrong-shake');
+                        if (lv3MistakeCount >= 3) {
+                            showLV3Hint();
+                        }
+                        setTimeout(() => {
+                            box.classList.remove('wrong-shake');
+                            isProcessing = false;
+                        }, 1000);
+                    }
+                }, 200);
+            };
+            
+            synth.speak(u);
+        }
+        function showLV3Hint() {
+            const existing = document.querySelector('.lv3-hint-overlay');
+            if(existing) existing.remove();
+            let target = currentTargetZhuyin;
+            let tone = '';
+            let main = target;
+            if(['ˊ','ˇ','ˋ','˙'].includes(target.slice(-1))) {
+                tone = target.slice(-1);
+                main = target.slice(0, -1);
+            }
+            let html = `
+                <div class="pinyin-main">${main.split('').map(c=>`<div>${c}</div>`).join('')}</div>
+                <div class="pinyin-tone ${tone==='˙'?'light':''}">${tone}</div>
+            `;
+            let overlay = document.createElement('div');
+            overlay.className = 'lv3-hint-overlay';
+            overlay.innerHTML = html;
+            document.getElementById('lv3-input-display').appendChild(overlay);
+        }
+        function clearLV3Input(){lv3Slots={initial:'',medial:'',final:''};pinyinMain=[];pinyinTone='';document.getElementById('lv3-input-display').className='lv3-input-box';updateLV3Display();isProcessing=false;}
+        function updateLV3Display(){document.getElementById('lv3-pinyin-main').innerHTML=pinyinMain.map(c=>`<div>${c}</div>`).join('');const t=document.getElementById('lv3-pinyin-tone');t.innerText=pinyinTone;t.className='pinyin-tone';if(pinyinTone==='˙')t.classList.add('tone-light');else if(pinyinTone!=='')t.classList.add('tone-normal');
+            if(lv3MistakeCount >= 3) {
+                 const existing = document.querySelector('.lv3-hint-overlay');
+                 if(!existing) showLV3Hint();
+            } else {
+                 const existing = document.querySelector('.lv3-hint-overlay');
+                 if(existing) existing.remove();
+            }
+        }
+
+        // --- Pinyin Practice Logic ---
+        function showPinyin() {
+            hideAllScreens();
+            document.getElementById('pinyin-screen').style.display='flex';
+            clearPinyin();
+            if(document.getElementById('pinyin-keyboard').children.length===0){
+                document.getElementById('pinyin-keyboard').innerHTML=`<div class="keyboard-label">聲母</div><div class="keyboard-section" id="pi-initials"></div><div class="keyboard-label">韻母</div><div class="keyboard-section" id="pi-finals"></div><div class="keyboard-label">聲調</div><div class="keyboard-section" id="pi-tones"></div>`;
+                createKeyboard('pi-initials',initials,addToPinyin);
+                createKeyboard('pi-finals',finalsDisplay,addToPinyin);
+                createKeyboard('pi-tones',['一聲','ˊ','ˇ','ˋ','˙'],addToPinyin);
+            }
+        }
+        
+        function createKeyboard(id,list,cb){
+            const c=document.getElementById(id);
+            list.forEach(ch=>{
+                let k=document.createElement('div');
+                k.className='key-tile';
+                k.innerText=ch;
+                k.onclick=()=>cb(ch);
+                c.appendChild(k);
+            });
+        }
+        
+        function addToPinyin(c) {
+            const toneMap={'ˊ':'二聲','ˇ':'三聲','ˋ':'四聲','˙':'輕聲','一聲':'一聲'};
+            speak(toneMap[c]||soundMap[c]||c);
+            
+            // 使用 piSlots 來限制與排列注音符號
+            if(['一聲','ˊ','ˇ','ˋ','˙'].includes(c)) {
+                pinyinTone = (c==='一聲') ? '' : c;
+            } else if(initials.includes(c)) {
+                piSlots.initial = c;
+            } else if(medials.includes(c)) {
+                piSlots.medial = c;
+            } else if(pureFinals.includes(c)) {
+                piSlots.final = c;
+            }
+            
+            pinyinMain = [piSlots.initial, piSlots.medial, piSlots.final].filter(x=>x!=='');
+            updatePinyinDisplay();
+            
+            if(['一聲','ˊ','ˇ','ˋ','˙'].includes(c)) {
+                setTimeout(checkAndSpeakPinyin, 600);
+            } else {
+                checkAndSpeakPinyin();
+            }
+        }
+        
+        function clearPinyin(){
+            piSlots={initial:'',medial:'',final:''};
+            pinyinMain=[];
+            pinyinTone='';
+            updatePinyinDisplay();
+        }
+        
+        function updatePinyinDisplay(){
+            document.getElementById('pinyin-text').innerHTML=pinyinMain.map(c=>`<div>${c}</div>`).join('');
+            const t=document.getElementById('pinyin-tone-mark');
+            t.innerText=pinyinTone;
+            t.className='pinyin-tone';
+            if(pinyinTone==='˙') t.classList.add('tone-light');
+            else if(pinyinTone!=='') t.classList.add('tone-normal');
+            document.getElementById('pinyin-display').className='pinyin-box-display';
+        }
+        
+        function checkAndSpeakPinyin() {
+            if(pinyinMain.length===0) return;
+            const s = pinyinMain.join('')+pinyinTone;
+            const baseStr = pinyinMain.join('');
+            
+            if(bopomofoMap[s]) {
+                setTimeout(()=>speak(bopomofoMap[s]), 400);
+            } else if(validBaseSet.has(baseStr) || bopomofoMap[baseStr]) {
+                // 如果在無聲調的基底字典有匹配，代表是合法的組合，可以讓語音合成自行朗讀該注音字串
+                setTimeout(()=>speak(s), 400);
+            } else if (pinyinMain.length === 1 && pinyinTone === '') {
+                // 單一注音符號且無聲調，表示剛起頭還沒拼完，不視為錯誤
+            } else {
+                playErrorSound();
+                document.getElementById('pinyin-display').classList.add('shake');
+                setTimeout(()=>document.getElementById('pinyin-display').classList.remove('shake'), 400);
+            }
+        }
+        
+        function readPinyin(){
+            if(pinyinMain.length===0) return;
+            const s = pinyinMain.join('')+pinyinTone;
+            const baseStr = pinyinMain.join('');
+            
+            if(bopomofoMap[s]) speak(bopomofoMap[s]);
+            else if (validBaseSet.has(baseStr) || bopomofoMap[baseStr]) speak(s);
+            else if (pinyinMain.length === 1 && pinyinTone === '') {
+                // 單按一個符號點擊時，也可獨立發出該符號的聲音
+                speak(soundMap[pinyinMain[0]] || pinyinMain[0]);
+            }
+            else {
+                playErrorSound();
+                document.getElementById('pinyin-display').classList.add('shake');
+                setTimeout(()=>document.getElementById('pinyin-display').classList.remove('shake'),400);
+            }
+        }
+
+        // --- Practice Logic ---
+        function showPractice() {
+            hideAllScreens();
+            document.getElementById('practice-screen').style.display='flex';
+            const g=document.getElementById('practice-grid');
+            if(g.children.length===0){
+                zhuyinAll.forEach(c=>{
+                    let t=document.createElement('div');
+                    t.className='practice-tile';
+                    t.innerText=c;
+                    t.onclick=()=>{
+                        speak(soundMap[c]||c);
+                        t.style.transform="scale(0.9)";
+                        setTimeout(()=>t.style.transform="scale(1)",100);
+                    };
+                    g.appendChild(t);
+                });
+                ['ˊ','ˇ','ˋ','˙'].forEach(c=>{
+                    let t=document.createElement('div');
+                    t.className='practice-tile tone';
+                    t.innerText=c;
+                    t.onclick=()=>{
+                        speak('聲調');
+                        t.style.transform="scale(0.9)";
+                        setTimeout(()=>t.style.transform="scale(1)",100);
+                    };
+                    g.appendChild(t);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
