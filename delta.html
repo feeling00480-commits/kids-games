@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>三角洲行動：戰術拼音特訓版 v9.5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0a110d;
+            color: #00ff41;
+            font-family: 'Share Tech Mono', monospace;
+            overflow: hidden;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .hud-border {
+            border: 3px solid #00ff41;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+        }
+        .scanline {
+            width: 100%; height: 3px; background: rgba(0, 255, 65, 0.05);
+            position: absolute; top: 0; z-index: 10;
+            animation: scan 4s linear infinite; pointer-events: none;
+        }
+        @keyframes scan { from { top: 0; } to { top: 100%; } }
+        
+        .btn-tactical {
+            background: rgba(0, 255, 65, 0.1); border: 2px solid #00ff41;
+            transition: all 0.1s; display: flex; align-items: center; justify-content: center;
+            font-weight: 900; font-size: 2.5rem;
+            border-radius: 12px; text-transform: uppercase;
+            color: #00ff41; min-height: 75px;
+            width: 100%;
+        }
+        
+        .btn-correct {
+            background: #00ff41 !important;
+            color: #000 !important;
+            box-shadow: 0 0 25px #00ff41;
+            border-color: #fff !important;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .letter-slot {
+            border-bottom: 8px solid #333; min-width: 90px; margin: 0 12px;
+            text-align: center; height: 130px; line-height: 130px; font-size: 6.5rem;
+        }
+        @media (max-width: 640px) {
+            .letter-slot { min-width: 45px; height: 90px; line-height: 90px; font-size: 4.2rem; margin: 0 5px; }
+            .btn-tactical { font-size: 1.8rem; border-radius: 8px; min-height: 60px; }
+        }
+        .letter-filled { border-bottom: 8px solid #00ff41; color: #00ff41; text-shadow: 0 0 25px rgba(0, 255, 65, 0.8); }
+        .glitch { animation: glitch 0.2s ease; }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-3px, 3px); }
+            100% { transform: translate(0); }
+        }
+        #start-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+            z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .kb-row {
+            display: flex; justify-content: center; width: 100%; gap: 10px; margin-bottom: 8px;
+        }
+        #target-icon img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(0, 255, 65, 0.5));
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col p-2 sm:p-4">
+
+    <div id="start-overlay">
+        <h1 class="text-5xl mb-12 tracking-widest text-green-400 font-bold text-center">DELTA FORCE<br>全能戰術打字機</h1>
+        <button onclick="startGame()" class="hud-border px-20 py-10 text-4xl font-bold hover:bg-green-500 hover:text-black transition-all">
+            啟動訓練
+        </button>
+        <p class="mt-8 text-gray-500 text-xl text-center">系統 v9.5：補齊 A-Z 基礎單字題庫</p>
+    </div>
+
+    <div class="scanline"></div>
+
+    <div class="flex justify-between items-start mb-4">
+        <div class="hud-border p-3 bg-black/60 text-base sm:text-2xl">
+            <div>ID: DELTA-01</div>
+            <div id="xp-display">XP: 0000</div>
+        </div>
+        <div class="text-right hud-border p-3 bg-black/60 text-base sm:text-2xl">
+            <div id="mission-count">已完成: 0</div>
+            <div id="status">狀態: 偵測中</div>
+        </div>
+    </div>
+
+    <div id="combat-screen" class="relative flex-grow hud-border bg-black/40 flex flex-col items-center justify-center overflow-hidden mb-6">
+        <div id="target-icon" class="w-full h-48 sm:h-72 flex items-center justify-center text-[10rem] sm:text-[14rem] z-20 cursor-pointer" title="點擊重複發音">📦</div>
+        <div id="mission-hint" class="text-3xl sm:text-5xl mb-8 text-white bg-green-900/40 px-10 py-4 rounded-full border-4 border-green-500 text-center max-w-[95%] font-bold">
+            等待指令...
+        </div>
+        <div id="answer-display" class="flex font-bold"></div>
+    </div>
+
+    <div id="keyboard-container" class="no-scrollbar flex flex-col items-center max-w-7xl mx-auto w-full pb-6 overflow-y-auto"></div>
+
+    <script>
+        const keyboardLayouts = {
+            eng: [
+                ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-"],
+                ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+                ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+                ["Z", "X", "C", "V", "B", "N", "M"]
+            ],
+            zh: [
+                ["ㄅ", "ㄉ", "ˇ", "ˋ", "ㄓ", "ˊ", "˙", "ㄚ", "ㄞ", "ㄢ", "ㄦ"],
+                ["ㄆ", "ㄊ", "ㄍ", "ㄐ", "ㄔ", "ㄗ", "ㄧ", "ㄛ", "ㄟ", "ㄣ"],
+                ["ㄇ", "ㄋ", "ㄎ", "ㄑ", "ㄕ", "ㄘ", "ㄨ", "ㄜ", "ㄠ", "ㄤ"],
+                ["ㄈ", "ㄌ", "ㄏ", "ㄒ", "ㄖ", "ㄙ", "ㄩ", "ㄝ", "ㄡ", "ㄥ"]
+            ]
+        };
+
+        // 外部圖片資源
+        const IMG_AK47 = "https://lh3.googleusercontent.com/pw/AP1GczNpAMgJK0d-4gkKtUYbQgpQBneEhCzfOLHo80vKxrKjHIF4-SJ47J4Si_QLKQWXkXXsC2btQgj_7O85_88hnCZLzkR7oBI27QARx85UUbUUbTCwn710=w800";
+        const IMG_M4A1 = "https://lh3.googleusercontent.com/pw/AP1GczMF5lwh5XODH2sN0E8-Kre8PXY8OFQOSgYjV52gzkPfN_z93RdC60CuQEpHHODgBt_f1lMLm4QoHi_R9xaLVr7S8Q_wDM-s3GID6fyhLzdgxOzKWc2B=w800";
+        const IMG_KAI = "https://lh3.googleusercontent.com/pw/AP1GczNTwL1k_-ywBT_s6gwRjjxekRFmsuHIn6sc2ZCdUWmaJHJaCAbwH8-50xMalHi7guJkYJv0kveMifcPtjdzQSfJxQ-kLP9lVI4ebbBxxCQzaBWZEX7I=w800";
+        const IMG_LUNA = "https://lh3.googleusercontent.com/pw/AP1GczO48FucbdbOkOc5g5n5PjVhPKnCS1qU7uGvEBUbGrqRYVt_WCPQ_TW9tqiQ37S5PNC4BFaP-I_bFOVNzgdi0ol16x_uuzAzo0O-ZzJuAa6gbm2QvPEg=w800";
+        const IMG_VYRON = "https://lh3.googleusercontent.com/pw/AP1GczMbUtGAF-AAAqhkBe46ZioUUpayXtWCWwn5MfG_NnF_sxOfxpiwSmaqdtOTinMZ7pyGND2Oq2vPwFWDvKrCgRIem7e_i1DWI_PKiBoO67VXpNLhqeqK=w800";
+        const IMG_HACKCLAW = "https://lh3.googleusercontent.com/pw/AP1GczOuR0BE2rAm9VpXPZMhI1QJq9yGCXx6s1Rjecz0w_pKMOCudT7lfiaVLoqPO3hAcSesjGTh2Bc3Q_H_SJne1A5AvlwQLyl3sXATVcWNLBEqVN8mJPEm=w800";
+        const IMG_VECTOR = "https://lh3.googleusercontent.com/pw/AP1GczN_T4HnggL2L7yWlw85siy5-G9Zn8OQ7ZXjrhqWqLSU6e5JQ6SCqCZmSPsNa61rj9LLcA8Hf02hsS5BqlIWbQnWwjwObY9FvGNSyfLQ9XgKbUAtati9=w800";
+        const IMG_AWP = "https://lh3.googleusercontent.com/pw/AP1GczNMqoxdv4Gt3TrrO4UFh6gU4x52HSpjGIIrqKyUP2EK5NOVyi8qmYP2o36QBqsGQ-WBjTBrsg1GaL3KxgNfNrwPVJV53_udwtlqrSKIT2N46LNtFEno=w800";
+        const IMG_KAR98K = "https://lh3.googleusercontent.com/pw/AP1GczOXEcdnEyjr1NmdQ8Y6P18OLA-25GE7_AbCp431-rkyC9vY08iEnjZRsG4z7xrzGl3p4v-0CF2F2EyAoZIbmG4hPB1jmhqIYFWCVp5DWT-g9Syb22al=w800";
+        const IMG_SHIN_GODZILLA = "https://lh3.googleusercontent.com/pw/AP1GczNOEYwawzCTglloNztUvVlv0JO8vD_5Uccmmyj1MfMANZO675jf26NT2I8IZjmlwXeNIYM_STIU2bcos0MHCpCJClvsSIVBBdihSf8nrWGR1ljU-wwo=w800";
+        const IMG_GODZILLA_RANDOM = [
+            "https://lh3.googleusercontent.com/pw/AP1GczOvFMvyUYlmKNv3CHWf7FjFhxKQWy0hgnAnz5Vhp2m3oBQLcZAxF6lpIOdZuTyPeGrEWIo7CGhfwVmM4vu9icrvjOr249mtnXa4VTS-zNLCuwGbBiY6=w800",
+            "https://lh3.googleusercontent.com/pw/AP1GczM6MTYr1pHg-Ed1iSVwtK3WwuGIuwthndOf5QvQR-RzvKHr2xx-7_-npfwDrn8x4Yclfbn9f9xIQ2kQkLG4cJ-Tx_EqH6poTGFtq_j7BoB5kOWwnYd8=w800"
+        ];
+        const IMG_ZERO = "https://lh3.googleusercontent.com/pw/AP1GczOJVJF9ihPJQtuLpuAIKiO9ZOyWjl7yb2RO8TD1BjJGWZj8zZVh-WhYHkEVI4CbL-CUZQivl1uu6IwY-gvc8CabkvNApnVuyy-A5IRcrCKiQ-sFlw4L=w600";
+        const IMG_TIGA_RANDOM = [
+            "https://lh3.googleusercontent.com/pw/AP1GczOM6knpkogxMmrU6SkjYNO7VCekU8cOOAVLHH-Qdir8irMT_Mub9gM5533d6iO9DqhckLIoOo0NlxoNQtkeOrZEsHVfZqlF5PJhKxi4plovjlfrHVVG=w600",
+            "https://lh3.googleusercontent.com/pw/AP1GczPHYnggb0YqI1qnWLcZAV85NapAQL5a-m1c2PTUdyue1YwnaW8BoDuHKTv_5Tm1GzFhuNHoBvG6_9WhKR1Cial0WTaSCc2u1gVwayTDWzDuRy0RqMTD=w600"
+        ];
+
+        const missionSet = [
+            // --- A-Z 康軒課本基礎單字 ---
+            { word: 'APPLE', icon: '🍎', hint: '補給品：蘋果 APPLE', type: 'eng' },
+            { word: 'BIRD', icon: '🐦', hint: '偵查：小鳥 BIRD', type: 'eng' },
+            { word: 'CAT', icon: '🐱', hint: '代號：貓咪 CAT', type: 'eng' },
+            { word: 'DOG', icon: '🐶', hint: '巡邏：小狗 DOG', type: 'eng' },
+            { word: 'EGG', icon: '🥚', hint: '物資：雞蛋 EGG', type: 'eng' },
+            { word: 'FISH', icon: '🐟', hint: '偵測：魚兒 FISH', type: 'eng' },
+            { word: 'GO', icon: '🏃', hint: '出動指令：前進 GO', type: 'eng' },
+            { word: 'HELLO', icon: '👋', hint: '通訊語：你好 HELLO', type: 'eng' },
+            { word: 'ICE', icon: '🧊', hint: '冷卻：冰塊 ICE', type: 'eng' },
+            { word: 'JUMP', icon: '👟', hint: '動作：跳躍 JUMP', type: 'eng' },
+            { word: 'KITE', icon: '🪁', hint: '信號：風箏 KITE', type: 'eng' },
+            { word: 'LION', icon: '🦁', hint: '強悍：獅子 LION', type: 'eng' },
+            { word: 'MILK', icon: '🥛', hint: '補給：牛奶 MILK', type: 'eng' },
+            { word: 'NO', icon: '❌', hint: '拒絕：不 NO', type: 'eng' },
+            { word: 'OPEN', icon: '🔓', hint: '開啟：箱子 OPEN', type: 'eng' },
+            { word: 'PIG', icon: '🐷', hint: '偵測：小豬 PIG', type: 'eng' },
+            { word: 'QUEEN', icon: '👸', hint: '代號：女王 QUEEN', type: 'eng' },
+            { word: 'RED', icon: '🔴', hint: '顏色：紅色 RED', type: 'eng' },
+            { word: 'SUN', icon: '☀️', hint: '觀測：太陽 SUN', type: 'eng' },
+            { word: 'TEN', icon: '🔟', hint: '計時：十 TEN', type: 'eng' },
+            { word: 'UP', icon: '⬆️', hint: '爬升：向上 UP', type: 'eng' },
+            { word: 'VAN', icon: '🚐', hint: '載具：麵包車 VAN', type: 'eng' },
+            { word: 'WATER', icon: '💧', hint: '物資：水分 WATER', type: 'eng' },
+            { word: 'XRAY', icon: '🩻', hint: '透視：X 光 XRAY', type: 'eng' },
+            { word: 'YES', icon: '✅', hint: '確認：是 YES', type: 'eng' },
+            { word: 'ZOO', icon: '🦒', hint: '目標：動物園 ZOO', type: 'eng' },
+
+            // --- 戰術型號與角色 ---
+            { word: 'M4A1', icon: IMG_M4A1, hint: '找出突擊步槍 M4A1', type: 'eng' },
+            { word: 'AK47', icon: IMG_AK47, hint: '找出步槍 AK47', type: 'eng' },
+            { word: 'VECTOR', icon: IMG_VECTOR, hint: '找出衝鋒槍 VECTOR', type: 'eng' },
+            { word: 'AWP', icon: IMG_AWP, hint: '找出狙擊槍 AWP', type: 'eng' },
+            { word: 'KAI', icon: IMG_KAI, hint: '探員卡伊 KAI', type: 'eng' },
+            { word: 'LUNA', icon: IMG_LUNA, hint: '探員露娜 LUNA', type: 'eng' },
+            { word: 'ZERO', icon: IMG_ZERO, hint: '賽羅 ZERO', type: 'eng' },
+            { word: 'TIGA', icon: IMG_TIGA_RANDOM, hint: '迪迦 TIGA', type: 'eng' },
+            { word: 'SHIN', icon: IMG_SHIN_GODZILLA, hint: '真哥吉拉 SHIN', type: 'eng' },
+
+            // --- 注音單字化拆分 ---
+            { word: 'ㄨㄟˊ', icon: IMG_VECTOR, hint: '維克托的「維」ㄨㄟˊ', type: 'zh' },
+            { word: 'ㄎㄜˋ', icon: IMG_VECTOR, hint: '維克托的「克」ㄎㄜˋ', type: 'zh' },
+            { word: 'ㄊㄨㄛ', icon: IMG_VECTOR, hint: '維克托的「托」ㄊㄨㄛ', type: 'zh' },
+            { word: 'ㄇㄞˋ', icon: IMG_AWP, hint: '麥格農的「麥」ㄇㄞˋ', type: 'zh' },
+            { word: 'ㄍㄜˊ', icon: IMG_AWP, hint: '麥格農的「格」ㄍㄜˊ', type: 'zh' },
+            { word: 'ㄋㄨㄥˊ', icon: IMG_AWP, hint: '麥格農的「農」ㄋㄨㄥˊ', type: 'zh' },
+            { word: 'ㄎㄚˇ', icon: IMG_KAI, hint: '卡伊的「卡」ㄎㄚˇ', type: 'zh' },
+            { word: 'ㄧ', icon: IMG_KAI, hint: '卡伊的「伊」ㄧ', type: 'zh' },
+            { word: 'ㄏㄞˋ', icon: IMG_HACKCLAW, hint: '駭爪的「駭」ㄏㄞˋ', type: 'zh' },
+            { word: 'ㄓㄠˇ', icon: IMG_HACKCLAW, hint: '駭爪的「爪」ㄓㄠˇ', type: 'zh' },
+            { word: 'ㄙㄞˋ', icon: IMG_ZERO, hint: '賽羅的「賽」ㄙㄞˋ', type: 'zh' },
+            { word: 'ㄌㄨㄛˊ', icon: IMG_ZERO, hint: '賽羅的「羅」ㄌㄨㄛˊ', type: 'zh' },
+            { word: 'ㄉㄧˊ', icon: IMG_TIGA_RANDOM, hint: '迪迦的「迪」ㄉㄧˊ', type: 'zh' },
+            { word: 'ㄐㄧㄚ', icon: IMG_TIGA_RANDOM, hint: '迪迦的「迦」ㄐㄧㄚ', type: 'zh' },
+            { word: 'ㄍㄜ', icon: IMG_GODZILLA_RANDOM, hint: '哥吉拉的「哥」ㄍㄜ', type: 'zh' },
+            { word: 'ㄐㄧˊ', icon: IMG_GODZILLA_RANDOM, hint: '哥吉拉的「吉」ㄐㄧˊ', type: 'zh' },
+            { word: 'ㄌㄚ', icon: IMG_GODZILLA_RANDOM, hint: '哥吉拉的「拉」ㄌㄚ', type: 'zh' }
+        ];
+
+        missionSet.sort(() => Math.random() - 0.5);
+
+        let currentMissionIndex = 0;
+        let userInputIndex = 0;
+        let xp = 0;
+        let completedCount = 0;
+        let speechEnabled = false;
+
+        const answerDisplay = document.getElementById('answer-display');
+        const targetIcon = document.getElementById('target-icon');
+        const missionHint = document.getElementById('mission-hint');
+        const xpDisplay = document.getElementById('xp-display');
+        const missionCountDisplay = document.getElementById('mission-count');
+        const statusDisplay = document.getElementById('status');
+        const keyboardContainer = document.getElementById('keyboard-container');
+        const combatScreen = document.getElementById('combat-screen');
+
+        function speak(text, lang = 'zh-TW', rate = 0.85) {
+            if (!speechEnabled) return;
+            const utterance = new SpeechSynthesisUtterance();
+            utterance.text = (lang === 'en-US') ? text.toLowerCase() : text;
+            utterance.lang = lang;
+            utterance.rate = rate;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function playSpeech(isRepeat = false) {
+            if (!speechEnabled) return;
+            window.speechSynthesis.cancel();
+            const mission = missionSet[currentMissionIndex];
+            if (!mission) return;
+
+            if (!isRepeat) {
+                speak(`任務指令：${mission.hint}`, 'zh-TW', 0.85);
+            } else {
+                const lang = (mission.type === 'eng') ? 'en-US' : 'zh-TW';
+                speak(mission.word, lang, 0.85);
+            }
+
+            if (mission.word.length > 1) {
+                const delay = isRepeat ? 800 : 2800;
+                const lang = (mission.type === 'eng') ? 'en-US' : 'zh-TW';
+                setTimeout(() => {
+                    const currentM = missionSet[currentMissionIndex];
+                    if (currentM && currentM.word === mission.word) {
+                        mission.word.split('').forEach((char, i) => {
+                            setTimeout(() => {
+                                if(missionSet[currentMissionIndex]?.word === mission.word) {
+                                    speak(char, lang, 0.75);
+                                }
+                            }, i * 650);
+                        });
+                    }
+                }, delay);
+            }
+        }
+
+        function startGame() {
+            document.getElementById('start-overlay').style.display = 'none';
+            speechEnabled = true;
+            speak("戰術題庫已全數載入。開始特訓！", 'zh-TW');
+            setTimeout(loadMission, 1200);
+        }
+
+        targetIcon.onclick = () => {
+            playSpeech(true); 
+            targetIcon.classList.add('scale-110');
+            setTimeout(() => targetIcon.classList.remove('scale-110'), 200);
+        };
+
+        function initKeyboard(type) {
+            keyboardContainer.innerHTML = '';
+            const layout = keyboardLayouts[type];
+            const lang = (type === 'eng') ? 'en-US' : 'zh-TW';
+            
+            layout.forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'kb-row';
+                row.forEach(key => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-tactical';
+                    btn.innerText = key;
+                    btn.dataset.key = key;
+                    btn.onclick = () => {
+                        speak(key, lang);
+                        handleInput(key);
+                    };
+                    rowDiv.appendChild(btn);
+                });
+                keyboardContainer.appendChild(rowDiv);
+            });
+        }
+
+        function loadMission() {
+            const mission = missionSet[currentMissionIndex];
+            if (!mission) return;
+            userInputIndex = 0;
+            
+            let iconToDisplay = mission.icon;
+            if (Array.isArray(iconToDisplay)) {
+                iconToDisplay = iconToDisplay[Math.floor(Math.random() * iconToDisplay.length)];
+            }
+
+            targetIcon.innerHTML = '';
+            if (typeof iconToDisplay === 'string' && iconToDisplay.startsWith('http')) {
+                const img = new Image();
+                img.alt = "Target";
+                img.onload = () => {
+                    if(missionSet[currentMissionIndex]) targetIcon.appendChild(img);
+                };
+                img.onerror = () => { targetIcon.innerText = '⚠️'; };
+                img.src = iconToDisplay;
+            } else {
+                targetIcon.innerText = iconToDisplay;
+            }
+            
+            missionHint.innerText = mission.hint;
+            statusDisplay.innerText = "狀態: 鎖定目標";
+            statusDisplay.style.color = "#00ff41";
+            
+            initKeyboard(mission.type);
+            playSpeech(false);
+
+            answerDisplay.innerHTML = '';
+            mission.word.split('').forEach(() => {
+                const span = document.createElement('span');
+                span.innerText = '_';
+                span.className = 'letter-slot';
+                answerDisplay.appendChild(span);
+            });
+        }
+
+        function handleInput(char) {
+            const mission = missionSet[currentMissionIndex];
+            if (!mission || !mission.word || userInputIndex >= mission.word.length) return;
+
+            const targetChar = mission.word[userInputIndex].toUpperCase();
+            const btn = Array.from(document.querySelectorAll('.btn-tactical')).find(b => b.dataset.key === char);
+
+            if (char === targetChar) {
+                if (btn) btn.classList.add('btn-correct');
+                const spans = answerDisplay.querySelectorAll('span');
+                if (spans[userInputIndex]) {
+                    spans[userInputIndex].innerText = mission.word[userInputIndex];
+                    spans[userInputIndex].classList.add('letter-filled');
+                }
+                userInputIndex++;
+                
+                combatScreen.classList.add('glitch');
+                setTimeout(() => combatScreen.classList.remove('glitch'), 100);
+
+                if (userInputIndex === mission.word.length) {
+                    completeMission();
+                }
+            } else {
+                statusDisplay.innerText = "狀態: 指令錯誤";
+                statusDisplay.style.color = "#ff3e3e";
+                setTimeout(() => {
+                    statusDisplay.innerText = "狀態: 鎖定目標";
+                    statusDisplay.style.color = "#00ff41";
+                }, 1000);
+            }
+        }
+
+        function completeMission() {
+            userInputIndex = 999; 
+            xp += 100;
+            completedCount++;
+            xpDisplay.innerText = `XP: ${String(xp).padStart(4, '0')}`;
+            missionCountDisplay.innerText = `已完成: ${completedCount}`;
+            statusDisplay.innerText = "狀態: 任務達成！";
+
+            setTimeout(() => speak("目標擊破。做得好！", 'zh-TW'), 300);
+            setTimeout(() => {
+                currentMissionIndex = (currentMissionIndex + 1) % missionSet.length;
+                loadMission();
+            }, 2000);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (document.getElementById('start-overlay').style.display !== 'none') return;
+            const key = e.key.toUpperCase();
+            const lang = (missionSet[currentMissionIndex]?.type === 'eng') ? 'en-US' : 'zh-TW';
+            if (e.key.length === 1) {
+                speak(key, lang);
+                handleInput(key);
+            }
+        });
+    </script>
+</body>
+</html>

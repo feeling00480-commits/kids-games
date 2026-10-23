@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>機甲整備基地</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* 針對手機鎖定畫面避免滑動拖曳干擾 */
+    body {
+      overscroll-behavior-y: contain;
+      touch-action: none;
+    }
+    /* 隱藏捲軸但保留捲動功能 */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155; 
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 m-0 p-0 overflow-hidden h-screen w-screen">
+
+  <div id="root" class="h-full w-full"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ==========================================
+    // 音效引擎 (Web Audio API)
+    // ==========================================
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+
+    const initAudio = () => {
+      if (!audioCtx) audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    };
+
+    const playTone = (freq, type, duration, vol = 0.1) => {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    };
+
+    const playNoise = (duration, vol = 0.2, isLowpass = false) => {
+      if (!audioCtx) return;
+      const bufferSize = audioCtx.sampleRate * duration;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noiseSource = audioCtx.createBufferSource();
+      noiseSource.buffer = buffer;
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      
+      if (isLowpass) {
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 800;
+        noiseSource.connect(filter);
+        filter.connect(gainNode);
+      } else {
+        noiseSource.connect(gainNode);
+      }
+      gainNode.connect(audioCtx.destination);
+      noiseSource.start();
+    };
+
+    const SFX = {
+      click: () => playTone(600, 'sine', 0.1, 0.1),
+      slide: () => playTone(800, 'triangle', 0.1, 0.05),
+      place: () => playTone(1200, 'sine', 0.15, 0.15),
+      error: () => playTone(150, 'sawtooth', 0.3, 0.1),
+      crafting: () => {
+        if(!audioCtx) return;
+        for(let i=0; i<6; i++) {
+           setTimeout(() => playTone(300 + i * 50, 'square', 0.1, 0.05), i * 150);
+        }
+      },
+      explosion: () => {
+        playNoise(0.8, 0.5, true); 
+        playTone(100, 'sawtooth', 0.8, 0.3); 
+      },
+      success: () => {
+        if(!audioCtx) return;
+        playTone(523.25, 'sine', 0.15, 0.1); 
+        setTimeout(() => playTone(659.25, 'sine', 0.15, 0.1), 120); 
+        setTimeout(() => playTone(783.99, 'sine', 0.3, 0.1), 240); 
+      },
+      firework: () => {
+        playNoise(0.3, 0.1); 
+        playTone(400 + Math.random()*400, 'sine', 0.2, 0.05); 
+      },
+      win: () => {
+         if(!audioCtx) return;
+         [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+            setTimeout(() => playTone(freq, 'square', 0.3, 0.1), i * 150);
+         });
+      }
+    };
+
+    // ==========================================
+    // 輔助動畫與樣式
+    // ==========================================
+    const globalStyles = `
+      @keyframes shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0); }
+        20%, 80% { transform: translate3d(2px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+        40%, 60% { transform: translate3d(4px, 0, 0); }
+      }
+      .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+      @keyframes pulse-fast {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .8; transform: scale(1.05); }
+      }
+      .animate-pulse-fast { animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+      @keyframes craft-shake {
+        0%, 100% { transform: translateX(0) scale(1.05); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-8px) scale(1.05); filter: hue-rotate(90deg) brightness(1.5); }
+        20%, 40%, 60%, 80% { transform: translateX(8px) scale(1.05); filter: hue-rotate(-90deg) brightness(1.5); }
+      }
+      .animate-craft-shake { animation: craft-shake 0.8s ease-in-out forwards; }
+      @keyframes pop-out {
+        0% { transform: scale(0) translateY(20px); opacity: 0; }
+        50% { transform: scale(1.3) translateY(-30px); opacity: 1; }
+        80% { transform: scale(0.9) translateY(-10px); opacity: 1; }
+        100% { transform: scale(1) translateY(0); opacity: 1; }
+      }
+      .animate-pop-out { animation: pop-out 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+      @keyframes transfer-in {
+        0% { transform: translateY(0) scale(1); opacity: 1; }
+        100% { transform: translateY(-50px) scale(0.2); opacity: 0; }
+      }
+      .animate-transfer { animation: transfer-in 0.5s ease-in forwards; }
+      @keyframes firework-burst {
+        0% { transform: scale(0.5) translateY(50px); opacity: 0; }
+        50% { transform: scale(2) translateY(-20px); opacity: 1; }
+        100% { transform: scale(2.5) translateY(10px); opacity: 0; }
+      }
+      .animate-firework { animation: firework-burst 1.2s ease-out forwards; }
+      @keyframes massive-shake {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1.1); filter: brightness(1); }
+        10%, 30%, 50%, 70%, 90% { transform: translate3d(-15px, 15px, 0) scale(1.1) rotate(-5deg); filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(3); }
+        20%, 40%, 60%, 80% { transform: translate3d(15px, -15px, 0) scale(1.1) rotate(5deg); filter: brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(5); }
+      }
+      .animate-massive-shake { animation: massive-shake 0.8s cubic-bezier(.36,.07,.19,.97) both; }
+    `;
+
+    const Button = ({ children, onClick, className = "", color = "blue" }) => {
+      const colorClasses = {
+        blue: "bg-blue-600 hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.5)]",
+        green: "bg-emerald-500 hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)]",
+        purple: "bg-purple-600 hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.5)]",
+        red: "bg-rose-500 hover:bg-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.5)]",
+        orange: "bg-orange-600 hover:bg-orange-500 shadow-[0_0_15px_rgba(234,88,12,0.5)]",
+        gray: "bg-slate-600 hover:bg-slate-500 shadow-[0_0_10px_rgba(100,116,139,0.5)]"
+      };
+      return (
+        <button
+          onClick={() => { SFX.click(); onClick(); }}
+          className={`px-4 py-2 md:px-6 md:py-3 rounded-xl text-white font-bold text-lg md:text-xl transition-all duration-200 transform hover:scale-105 active:scale-95 ${colorClasses[color]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    };
+
+    const FireworksOverlay = ({ onBack, title = "任務完成！" }) => {
+      const [bursts, setBursts] = useState([]);
+      useEffect(() => {
+        SFX.win(); 
+        const interval = setInterval(() => {
+          setBursts(prev => [...prev, {
+            id: Date.now() + Math.random(),
+            x: Math.random() * 80 + 10,
+            y: Math.random() * 80 + 10,
+            emoji: ['🎇', '🎆', '✨', '🎉', '🌟', '🎊'][Math.floor(Math.random() * 6)]
+          }].slice(-12));
+          if(Math.random() > 0.3) SFX.firework();
+        }, 300);
+        return () => clearInterval(interval);
+      }, []);
+
+      return (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm overflow-hidden rounded-2xl">
+          {bursts.map(b => (
+            <div key={b.id} className="absolute text-7xl md:text-8xl animate-firework pointer-events-none" style={{ left: `${b.x}%`, top: `${b.y}%` }}>
+              {b.emoji}
+            </div>
+          ))}
+          <div className="relative z-10 flex flex-col items-center p-6 md:p-8 bg-slate-800 border-4 border-yellow-400 rounded-3xl shadow-[0_0_50px_rgba(250,204,21,0.5)] animate-pop-out text-center mx-4">
+            <div className="text-5xl md:text-6xl mb-4">🏆</div>
+            <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-500 drop-shadow-lg mb-8">
+              {title}
+            </h1>
+            <Button onClick={onBack} color="green" className="text-xl md:text-2xl px-8 py-3">返回指揮中心</Button>
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 共用：單根算盤柱子元件 (為手機直立優化加高)
+    // ==========================================
+    const AbacusColumn = ({ value, onChange, label, disabled, activeColor = "bg-cyan-400 shadow-[0_0_15px_#22d3ee]" }) => {
+      const topActive = value >= 5;
+      const bottomCount = value % 5;
+
+      const handleTopClick = () => {
+        if (disabled) return;
+        SFX.slide();
+        onChange(topActive ? value - 5 : value + 5);
+      };
+
+      const handleBottomClick = (clickedIdx) => {
+        if (disabled) return;
+        SFX.slide();
+        const isActive = clickedIdx <= bottomCount;
+        onChange((topActive ? 5 : 0) + (isActive ? clickedIdx - 1 : clickedIdx));
+      };
+
+      return (
+        <div className="flex flex-col items-center relative">
+          {/* 上半部 (1顆代表 5) 加大 */}
+          <div className="relative w-16 h-24 md:w-20 md:h-24 bg-slate-800/80 rounded-t-2xl flex justify-center border-b-4 border-slate-900 overflow-hidden shadow-[inset_0_0_15px_rgba(0,0,0,0.5)]">
+             <div className="absolute w-2 h-full bg-slate-950 shadow-inner" />
+             <div
+               onClick={handleTopClick}
+               className={`absolute w-14 h-10 md:w-16 md:h-10 rounded-full border-b-4 border-black/30 cursor-pointer transition-all duration-300 z-10
+                  ${topActive ? activeColor : 'bg-slate-600 hover:bg-slate-500'}
+               `}
+               style={{ top: topActive ? '44px' : '8px' }}
+             />
+          </div>
+          {/* 中間分隔線 */}
+          <div className="w-20 h-4 md:w-24 md:h-4 bg-slate-950 z-20 shadow-md" />
+          {/* 下半部 (4顆代表 1) 加大空間與間距 */}
+          <div className="relative w-16 h-56 md:w-20 md:h-64 bg-slate-800/80 rounded-b-2xl flex justify-center overflow-hidden shadow-[inset_0_0_15px_rgba(0,0,0,0.5)]">
+             <div className="absolute w-2 h-full bg-slate-950 shadow-inner" />
+             {[1, 2, 3, 4].map(idx => {
+                const isActive = idx <= bottomCount;
+                return (
+                   <div
+                     key={idx}
+                     onClick={() => handleBottomClick(idx)}
+                     className={`absolute w-14 h-10 md:w-16 md:h-12 rounded-full border-b-4 border-black/30 cursor-pointer transition-all duration-300 z-10
+                       ${isActive ? activeColor : 'bg-slate-600 hover:bg-slate-500'}
+                     `}
+                     // 手機與平板適應高度
+                     style={{ top: isActive ? `${(idx - 1) * 44 + 8}px` : `${(idx - 1) * 44 + 50}px` }}
+                   />
+                )
+             })}
+          </div>
+          {/* 數值標籤 */}
+          <div className="mt-4 px-3 py-1 bg-slate-800 rounded-full text-slate-300 text-xs md:text-sm font-bold border-2 border-slate-600 whitespace-nowrap">{label}</div>
+          <div className={`mt-1 text-2xl md:text-3xl font-black ${value > 0 ? 'text-slate-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]' : 'text-slate-500'}`}>
+            {value}
+          </div>
+        </div>
+      );
+    };
+
+
+    // ==========================================
+    // 關卡一：基地啟動 
+    // ==========================================
+    const Level1 = ({ onBack, updateScore }) => {
+      const [stage, setStage] = useState(0); 
+      const [expectedNum, setExpectedNum] = useState(1);
+      const [nodes, setNodes] = useState([]);
+      const [dragging, setDragging] = useState(null);
+      const [errorNode, setErrorNode] = useState(null);
+      const [stageCompleted, setStageCompleted] = useState(false);
+      const [gameCompleted, setGameCompleted] = useState(false);
+      const dropZoneRef = useRef(null);
+
+      const initStage = (stg) => {
+        const start = stg * 10 + 1;
+        setExpectedNum(start);
+        const nums = Array.from({ length: 10 }, (_, i) => start + i);
+        const shuffled = nums.sort(() => Math.random() - 0.5).map((n) => ({
+          value: n, x: Math.random() * 75 + 10, y: Math.random() * 60 + 10, placed: false
+        }));
+        setNodes(shuffled);
+        setStageCompleted(false);
+      };
+
+      useEffect(() => { initStage(0); }, []);
+
+      const handlePointerDown = (e, node) => {
+        if (node.placed || stageCompleted || gameCompleted) return;
+        e.preventDefault();
+        e.target.setPointerCapture(e.pointerId);
+        SFX.click(); 
+        const rect = e.target.getBoundingClientRect();
+        setDragging({ value: node.value, pointerId: e.pointerId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, clientX: e.clientX, clientY: e.clientY });
+      };
+
+      const handlePointerMove = (e) => {
+        if (!dragging || e.pointerId !== dragging.pointerId) return;
+        setDragging({ ...dragging, clientX: e.clientX, clientY: e.clientY });
+      };
+
+      const handlePointerUp = (e) => {
+        if (!dragging || e.pointerId !== dragging.pointerId) return;
+        if (dropZoneRef.current) {
+          const dropRect = dropZoneRef.current.getBoundingClientRect();
+          if (e.clientY >= dropRect.top - 40) {
+            if (dragging.value === expectedNum) {
+              SFX.place(); 
+              setNodes(prev => prev.map(n => n.value === dragging.value ? { ...n, placed: true } : n));
+              const nextExpected = expectedNum + 1;
+              setExpectedNum(nextExpected);
+              updateScore(expectedNum);
+
+              if (nextExpected > stage * 10 + 10) {
+                setStageCompleted(true);
+                SFX.success(); 
+                setTimeout(() => {
+                  if (stage < 9) { setStage(stage + 1); initStage(stage + 1); } 
+                  else { setGameCompleted(true); }
+                }, 2000); 
+              }
+            } else {
+              SFX.error(); 
+              setErrorNode(dragging.value);
+              setTimeout(() => setErrorNode(null), 500);
+            }
+          }
+        }
+        setDragging(null);
+      };
+
+      const slots = Array.from({ length: 10 }, (_, i) => stage * 10 + 1 + i);
+
+      return (
+        <div className="flex flex-col w-full h-full p-1 md:p-2 relative touch-none select-none" onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
+          {gameCompleted && <FireworksOverlay onBack={onBack} title="100% 充能完畢！" />}
+          <div className="flex justify-between w-full items-center mb-2 z-10 shrink-0">
+            <Button onClick={onBack} color="gray" className="text-xs md:text-sm px-3 md:px-4 py-2">⬅ 返回</Button>
+            <div className="bg-slate-800 border-2 border-blue-400 px-4 md:px-6 py-1 md:py-2 rounded-lg shadow-[0_0_10px_rgba(96,165,250,0.5)] text-center">
+              <h2 className="text-base md:text-xl font-bold text-blue-300">
+                目標：<span className="text-emerald-400 text-xl md:text-3xl animate-pulse">{expectedNum > stage * 10 + 10 ? '完成' : expectedNum}</span>
+              </h2>
+            </div>
+            <div className="text-slate-400 text-xs md:text-sm font-mono bg-slate-800 px-2 py-1 rounded-full border border-slate-700 hidden sm:block">
+              進度: {stage + 1}/10
+            </div>
+          </div>
+          <div className="flex flex-col flex-1 min-h-0 gap-2 relative">
+            <div className="relative flex-1 w-full bg-slate-800/50 rounded-2xl border-2 border-slate-600 overflow-hidden">
+              <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+              {stageCompleted && !gameCompleted && (
+                <div className="absolute inset-0 flex items-center justify-center bg-emerald-900/60 backdrop-blur-sm z-20">
+                   <h2 className="text-4xl md:text-6xl font-black text-emerald-300 drop-shadow-[0_0_20px_rgba(16,185,129,1)] animate-pulse">第 {stage + 1} 階段 成功！</h2>
+                </div>
+              )}
+              {nodes.filter(n => !n.placed && n.value !== dragging?.value).map((node) => (
+                <div key={node.value} onPointerDown={(e) => handlePointerDown(e, node)}
+                  className={`absolute flex items-center justify-center w-12 h-12 md:w-16 md:h-16 rounded-xl text-lg md:text-2xl font-bold cursor-grab active:cursor-grabbing transition-transform hover:scale-110 bg-slate-700 text-blue-300 border-2 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]
+                    ${errorNode === node.value ? 'animate-shake bg-rose-900 border-rose-500 text-rose-300' : ''}`}
+                  style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)' }}>
+                  {node.value}
+                </div>
+              ))}
+            </div>
+            <div ref={dropZoneRef} className="shrink-0 w-full p-2 md:p-6 bg-slate-800 rounded-3xl grid grid-cols-5 gap-1 md:gap-4 border-t-4 border-slate-600 shadow-inner">
+              {slots.map(slotVal => {
+                const node = nodes.find(n => n.value === slotVal);
+                return (
+                  <div key={slotVal} className="aspect-square flex items-center justify-center rounded-xl border-2 md:border-4 border-dashed border-slate-600 bg-slate-900/50 relative overflow-hidden">
+                    {node?.placed ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-emerald-500 text-white shadow-[inset_0_0_20px_rgba(255,255,255,0.3)] text-lg md:text-3xl font-black animate-pulse-fast">{slotVal}</div>
+                    ) : (
+                      <span className="text-slate-600 text-lg md:text-4xl font-black opacity-40 select-none pointer-events-none">{slotVal}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {dragging && (
+            <div className="fixed z-50 flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl text-xl md:text-2xl font-bold bg-cyan-500 text-white border-4 border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.8)] pointer-events-none transform scale-125"
+              style={{ left: dragging.clientX - dragging.offsetX, top: dragging.clientY - dragging.offsetY }}>
+              {dragging.value}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 關卡二：核心工程室
+    // ==========================================
+    const equipments = ['🗡️ 光束劍', '🛡️ 能量盾', '🔫 雷射槍', '🚀 噴射背包', '📡 戰術雷達', '🦾 強化裝甲', '🔋 聚變電池'];
+    const Level2 = ({ onBack, updateScore }) => {
+      const [globalStage, setGlobalStage] = useState(0); 
+      const [target, setTarget] = useState(5);
+      const [parts, setParts] = useState([]);
+      const [slot1, setSlot1] = useState(null);
+      const [slot2, setSlot2] = useState(null);
+      const [status, setStatus] = useState('idle'); 
+      const [craftedItem, setCraftedItem] = useState(null);
+      const [gameCompleted, setGameCompleted] = useState(false);
+
+      const generateStageData = (stageIdx) => {
+        const tier = Math.floor(stageIdx / 15); 
+        if (tier > 9) { setGameCompleted(true); return; }
+        const optionsCount = 4 + Math.floor((stageIdx % 15) / 3); 
+        const minTarget = tier === 0 ? 2 : tier * 10 + 1;
+        const maxTarget = tier * 10 + 10;
+        const newTarget = Math.floor(Math.random() * (maxTarget - minTarget + 1)) + minTarget;
+        const correct1 = Math.floor(Math.random() * (newTarget - 1)) + 1;
+        const correct2 = newTarget - correct1;
+        let newParts = [correct1, correct2];
+        while (newParts.length < optionsCount) {
+          const trap = Math.floor(Math.random() * maxTarget) + 1;
+          if (!newParts.includes(trap)) newParts.push(trap);
+        }
+        newParts.sort(() => Math.random() - 0.5);
+        setTarget(newTarget);
+        setParts(newParts.map((val, idx) => ({ id: idx, value: val, used: false })));
+      };
+
+      useEffect(() => { generateStageData(globalStage); updateScore(globalStage); }, [globalStage]);
+
+      useEffect(() => {
+        if (slot1 !== null && slot2 !== null && status === 'idle') {
+          setStatus('checking'); 
+          SFX.click(); 
+          setTimeout(() => {
+            setStatus('crafting'); 
+            SFX.crafting(); 
+            setTimeout(() => {
+              if (slot1.value + slot2.value === target) {
+                setCraftedItem(equipments[Math.floor(Math.random() * equipments.length)]);
+                setStatus('success'); 
+                SFX.success(); 
+                setTimeout(() => {
+                  setSlot1(null); setSlot2(null); setStatus('idle'); setGlobalStage(prev => prev + 1); 
+                }, 2500); 
+              } else {
+                setStatus('explosion'); 
+                SFX.explosion(); 
+                if (navigator.vibrate) navigator.vibrate([200, 100, 300]);
+                setTimeout(() => {
+                  setParts(prev => prev.map(p => p.id === slot1.id || p.id === slot2.id ? { ...p, used: false } : p));
+                  setSlot1(null); setSlot2(null); setStatus('idle');
+                }, 1800); 
+              }
+            }, 1200); 
+          }, 500); 
+        }
+      }, [slot1, slot2, target, status]);
+
+      const handlePartClick = (part) => {
+        if (status !== 'idle' || part.used) return;
+        SFX.click(); 
+        if (slot1 === null) {
+          setSlot1(part); setParts(prev => prev.map(p => p.id === part.id ? { ...p, used: true } : p));
+        } else if (slot2 === null) {
+          setSlot2(part); setParts(prev => prev.map(p => p.id === part.id ? { ...p, used: true } : p));
+        }
+      };
+
+      const clearSlots = () => {
+        if (status === 'idle' || status === 'explosion') {
+          SFX.click();
+          if (slot1) setParts(prev => prev.map(p => p.id === slot1.id ? { ...p, used: false } : p));
+          if (slot2) setParts(prev => prev.map(p => p.id === slot2.id ? { ...p, used: false } : p));
+          setSlot1(null); setSlot2(null);
+        }
+      };
+
+      const currentTier = Math.floor(globalStage / 15);
+      const currentTierText = `${currentTier * 10 + 1} ~ ${currentTier * 10 + 10}`;
+
+      return (
+        <div className="flex flex-col items-center w-full h-full p-2 relative">
+          {gameCompleted && <FireworksOverlay onBack={onBack} title="傳說級工匠！" />}
+          <div className="flex justify-between w-full items-center mb-2 z-10 shrink-0">
+            <Button onClick={onBack} color="gray" className="text-xs md:text-sm px-3 md:px-4 py-2">⬅ 返回</Button>
+            <div className="bg-slate-800 border-2 border-orange-400 px-3 md:px-6 py-1 md:py-2 rounded-lg shadow-[0_0_10px_rgba(251,146,60,0.5)]">
+              <h2 className="text-sm md:text-xl font-bold text-orange-300">核心工程 (範圍: {currentTierText})</h2>
+            </div>
+            <div className="text-slate-400 text-xs md:text-sm font-mono bg-slate-800 px-2 py-1 rounded-full border border-slate-700 hidden sm:block">鍛造: {globalStage} 次</div>
+          </div>
+          <div className="flex flex-col items-center w-full max-w-4xl flex-1 justify-around space-y-4 md:space-y-8 pb-4">
+            <div className={`relative w-full bg-slate-800/80 rounded-3xl p-4 md:p-8 border-4 transition-all duration-300 flex flex-col items-center
+                ${status === 'crafting' ? 'border-yellow-400 animate-craft-shake shadow-[0_0_40px_rgba(250,204,21,0.6)]' : 'border-slate-600'}
+                ${status === 'success' ? 'border-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.5)]' : ''}
+                ${status === 'explosion' ? 'border-rose-600 bg-rose-950/40 animate-massive-shake shadow-[0_0_60px_rgba(225,29,72,0.8)]' : ''}`}>
+              <h3 className="text-sm md:text-xl text-slate-300 mb-2">本次目標核心能量</h3>
+              <div className={`relative w-24 h-24 md:w-36 md:h-36 rounded-full border-4 md:border-8 flex items-center justify-center mb-4 md:mb-8 z-10 transition-colors
+                  ${status === 'explosion' ? 'border-rose-500 bg-rose-900 shadow-[0_0_40px_rgba(244,63,94,1)]' : 'border-orange-500 bg-orange-950 shadow-[0_0_30px_rgba(249,115,22,0.6)]'}`}>
+                {status === 'success' ? ( <span className="text-xl md:text-4xl animate-pop-out font-black text-center px-1">{craftedItem}</span> ) 
+                : status === 'explosion' ? ( <span className="text-5xl md:text-7xl animate-pop-out drop-shadow-[0_0_20px_rgba(255,0,0,1)]">💥</span> ) 
+                : ( <span className="text-4xl md:text-7xl font-black text-orange-400 drop-shadow-[0_0_10px_rgba(251,146,60,0.8)]">{target}</span> )}
+              </div>
+              <div className="flex space-x-2 md:space-x-8 items-center">
+                <div onClick={clearSlots} className={`w-16 h-16 md:w-24 md:h-24 rounded-2xl border-4 border-dashed flex items-center justify-center cursor-pointer transition-all ${slot1 ? 'border-solid border-cyan-400 bg-cyan-950/50 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'border-slate-500 hover:border-cyan-500 hover:bg-slate-700'}`}>
+                  {slot1 && ( <span className={`text-2xl md:text-4xl font-bold text-cyan-300 ${status === 'checking' ? 'animate-transfer' : ''}`}>{slot1.value}</span> )}
+                </div>
+                <div className="text-2xl md:text-4xl text-slate-400 font-black">+</div>
+                <div onClick={clearSlots} className={`w-16 h-16 md:w-24 md:h-24 rounded-2xl border-4 border-dashed flex items-center justify-center cursor-pointer transition-all ${slot2 ? 'border-solid border-cyan-400 bg-cyan-950/50 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'border-slate-500 hover:border-cyan-500 hover:bg-slate-700'}`}>
+                  {slot2 && ( <span className={`text-2xl md:text-4xl font-bold text-cyan-300 ${status === 'checking' ? 'animate-transfer' : ''}`}>{slot2.value}</span> )}
+                </div>
+              </div>
+              <div className="h-6 md:h-10 mt-3 md:mt-6 flex items-center justify-center text-center">
+                {status === 'crafting' && <p className="text-base md:text-2xl font-black text-yellow-400 tracking-widest">⚙️ 激烈鍛造中... ⚙️</p>}
+                {status === 'success' && <p className="text-base md:text-2xl font-bold text-emerald-400">✨ 獲得：{craftedItem}！</p>}
+                {status === 'explosion' && <p className="text-base md:text-2xl font-black text-rose-400 animate-pulse">⚠️ 大爆炸！ ⚠️</p>}
+                {status === 'idle' && slot1 === null && <p className="text-xs md:text-lg text-slate-400">點擊下方零件加入合成爐</p>}
+              </div>
+            </div>
+            <div className="w-full bg-slate-800 rounded-2xl p-4 border-2 border-slate-700 max-h-[30vh] overflow-y-auto">
+              <div className="flex flex-wrap justify-center gap-2 md:gap-4">
+                {parts.map((p) => (
+                  <button key={p.id} onClick={() => handlePartClick(p)} disabled={status !== 'idle' || p.used}
+                    className={`w-14 h-14 md:w-20 md:h-20 rounded-xl flex items-center justify-center text-xl md:text-3xl font-bold text-slate-200 border-b-4 bg-gradient-to-t from-slate-700 to-slate-600 border-slate-900 hover:from-cyan-600 hover:to-cyan-500 hover:border-cyan-900 hover:text-white active:translate-y-1 active:border-b-0 transition-all duration-100 shadow-lg ${p.used || status !== 'idle' ? 'opacity-30 cursor-not-allowed scale-95' : ''}`}>
+                    {p.value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 關卡三：算力校準 (能量珠算儀)
+    // ==========================================
+    const Level3 = ({ onBack, updateScore }) => {
+      const [globalStage, setGlobalStage] = useState(0);
+      const [target, setTarget] = useState(7);
+      const [tensVal, setTensVal] = useState(0);
+      const [onesVal, setOnesVal] = useState(0);
+      const [status, setStatus] = useState('idle');
+      
+      const generateTarget = (stageIdx) => {
+        let min, max;
+        if (stageIdx < 5) { min = 1; max = 9; } 
+        else if (stageIdx < 10) { min = 10; max = 49; } 
+        else { min = 50; max = 99; }
+        setTarget(Math.floor(Math.random() * (max - min + 1)) + min);
+        setTensVal(0); setOnesVal(0); setStatus('idle');
+      };
+
+      useEffect(() => { generateTarget(globalStage); updateScore(globalStage); }, [globalStage]);
+
+      useEffect(() => {
+        const currentTotal = tensVal * 10 + onesVal;
+        if (currentTotal === target && status === 'idle') {
+           setStatus('success');
+           SFX.success();
+           setTimeout(() => setGlobalStage(prev => prev + 1), 2000); 
+        }
+      }, [tensVal, onesVal, target, status]);
+
+      const currentTotal = tensVal * 10 + onesVal;
+
+      return (
+        <div className="flex flex-col items-center w-full h-full p-2 relative select-none">
+          <div className="flex justify-between w-full items-center mb-2 z-10 shrink-0">
+            <Button onClick={onBack} color="gray" className="text-xs md:text-sm px-3 md:px-4 py-2">⬅ 返回</Button>
+            <div className="bg-slate-800 border-2 border-purple-500 px-3 md:px-6 py-1 md:py-2 rounded-lg shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+              <h2 className="text-sm md:text-xl font-bold text-purple-300">算力校準</h2>
+            </div>
+            <div className="text-slate-400 text-xs md:text-sm font-mono bg-slate-800 px-2 py-1 rounded-full border border-slate-700 hidden sm:block">校準: {globalStage} 次</div>
+          </div>
+
+          <div className="flex flex-col items-center w-full max-w-2xl flex-1 justify-around space-y-4 pb-4">
+            <div className={`w-full bg-slate-800/80 rounded-3xl p-4 md:p-6 border-4 flex flex-col items-center transition-all duration-300
+              ${status === 'success' ? 'border-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.5)] animate-pulse-fast' : 'border-slate-600'}
+            `}>
+               <h3 className="text-sm md:text-xl text-slate-300 mb-1">目標數值</h3>
+               <div className="text-5xl md:text-8xl font-black text-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]">
+                  {target}
+               </div>
+               <div className="h-6 mt-2">
+                  {status === 'success' && <p className="text-lg md:text-2xl font-bold text-emerald-400">✨ 同步完成 ✨</p>}
+                  {status === 'idle' && (
+                     <p className="text-sm md:text-lg text-slate-400">
+                        目前輸入：<span className={`font-bold ${currentTotal > 0 ? 'text-cyan-300' : ''}`}>{currentTotal}</span>
+                     </p>
+                  )}
+               </div>
+            </div>
+
+            <div className="w-full flex justify-center items-end space-x-6 md:space-x-16 p-4 bg-slate-900 rounded-3xl border-2 border-slate-700 shadow-xl">
+               <AbacusColumn value={tensVal} onChange={setTensVal} label="十位 (x10)" disabled={status === 'success'} activeColor="bg-purple-400 shadow-[0_0_15px_#c084fc]" />
+               <AbacusColumn value={onesVal} onChange={setOnesVal} label="個位 (x1)" disabled={status === 'success'} activeColor="bg-purple-400 shadow-[0_0_15px_#c084fc]" />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 關卡四：實戰演練 (珠算加減法)
+    // ==========================================
+    const Level4 = ({ onBack, updateScore }) => {
+      const [globalStage, setGlobalStage] = useState(0);
+      const [equation, setEquation] = useState({ n1: 0, op: '+', n2: 0, ans: 0 });
+      const [tensVal, setTensVal] = useState(0);
+      const [onesVal, setOnesVal] = useState(0);
+      const [status, setStatus] = useState('idle');
+      
+      const generateEquation = (stageIdx) => {
+        let n1, n2, op, ans;
+        // 階段 1: 單位數加減 (無負數, 最大至9)
+        if (stageIdx < 5) {
+            op = Math.random() > 0.5 ? '+' : '-';
+            if (op === '+') {
+                n1 = Math.floor(Math.random() * 8) + 1; // 1~8
+                n2 = Math.floor(Math.random() * (9 - n1)) + 1; // 確保答案不超過9
+                ans = n1 + n2;
+            } else {
+                n1 = Math.floor(Math.random() * 8) + 2; // 2~9
+                n2 = Math.floor(Math.random() * (n1 - 1)) + 1; // 確保答案大於0
+                ans = n1 - n2;
+            }
+        }
+        // 階段 2: 兩位數 與 單位數加減
+        else if (stageIdx < 10) {
+            op = Math.random() > 0.5 ? '+' : '-';
+            if (op === '+') {
+                n1 = Math.floor(Math.random() * 80) + 10; // 10~89
+                n2 = Math.floor(Math.random() * 9) + 1; // 1~9
+                ans = n1 + n2;
+            } else {
+                n1 = Math.floor(Math.random() * 80) + 11; // 11~90
+                n2 = Math.floor(Math.random() * 9) + 1; // 1~9
+                ans = n1 - n2;
+            }
+        }
+        // 階段 3: 兩位數加減
+        else {
+            op = Math.random() > 0.5 ? '+' : '-';
+            if (op === '+') {
+                n1 = Math.floor(Math.random() * 40) + 10; // 10~49
+                n2 = Math.floor(Math.random() * 40) + 10; // 10~49
+                ans = n1 + n2;
+            } else {
+                n1 = Math.floor(Math.random() * 40) + 50; // 50~89
+                n2 = Math.floor(Math.random() * 40) + 10; // 10~49
+                ans = n1 - n2;
+            }
+        }
+        setEquation({ n1, op, n2, ans });
+        setTensVal(0); setOnesVal(0); setStatus('idle');
+      };
+
+      useEffect(() => { generateEquation(globalStage); updateScore(globalStage); }, [globalStage]);
+
+      useEffect(() => {
+        const currentTotal = tensVal * 10 + onesVal;
+        if (currentTotal === equation.ans && status === 'idle') {
+           setStatus('success');
+           SFX.success();
+           setTimeout(() => setGlobalStage(prev => prev + 1), 2000); 
+        }
+      }, [tensVal, onesVal, equation.ans, status]);
+
+      const currentTotal = tensVal * 10 + onesVal;
+
+      return (
+        <div className="flex flex-col items-center w-full h-full p-2 relative select-none">
+          <div className="flex justify-between w-full items-center mb-2 z-10 shrink-0">
+            <Button onClick={onBack} color="gray" className="text-xs md:text-sm px-3 md:px-4 py-2">⬅ 返回</Button>
+            <div className="bg-slate-800 border-2 border-pink-500 px-3 md:px-6 py-1 md:py-2 rounded-lg shadow-[0_0_10px_rgba(236,72,153,0.5)]">
+              <h2 className="text-sm md:text-xl font-bold text-pink-300">實戰演練</h2>
+            </div>
+            <div className="text-slate-400 text-xs md:text-sm font-mono bg-slate-800 px-2 py-1 rounded-full border border-slate-700 hidden sm:block">解題: {globalStage} 次</div>
+          </div>
+
+          <div className="flex flex-col items-center w-full max-w-2xl flex-1 justify-around space-y-4 pb-4">
+            <div className={`w-full bg-slate-800/80 rounded-3xl p-4 md:p-6 border-4 flex flex-col items-center transition-all duration-300
+              ${status === 'success' ? 'border-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.5)] animate-pulse-fast' : 'border-slate-600'}
+            `}>
+               <h3 className="text-sm md:text-xl text-slate-300 mb-1">目標任務</h3>
+               <div className="text-4xl md:text-7xl font-black text-pink-400 drop-shadow-[0_0_15px_rgba(244,114,182,0.8)] tracking-widest text-center break-words w-full">
+                  {equation.n1} <span className="text-slate-100">{equation.op}</span> {equation.n2} = ?
+               </div>
+               <div className="h-6 mt-2">
+                  {status === 'success' && <p className="text-lg md:text-2xl font-bold text-emerald-400">✨ 運算正確 ✨</p>}
+                  {status === 'idle' && (
+                     <p className="text-sm md:text-lg text-slate-400">
+                        目前算盤輸入：<span className={`font-bold ${currentTotal > 0 ? 'text-pink-300' : ''}`}>{currentTotal}</span>
+                     </p>
+                  )}
+               </div>
+            </div>
+
+            <div className="w-full flex justify-center items-end space-x-6 md:space-x-16 p-4 bg-slate-900 rounded-3xl border-2 border-slate-700 shadow-xl">
+               <AbacusColumn value={tensVal} onChange={setTensVal} label="十位 (x10)" disabled={status === 'success'} activeColor="bg-pink-400 shadow-[0_0_15px_#f472b6]" />
+               <AbacusColumn value={onesVal} onChange={setOnesVal} label="個位 (x1)" disabled={status === 'success'} activeColor="bg-pink-400 shadow-[0_0_15px_#f472b6]" />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 主程式：指揮中心
+    // ==========================================
+    function App() {
+      const [currentView, setCurrentView] = useState('menu');
+      const [bestScoreL1, setBestScoreL1] = useState(0); 
+      const [bestScoreL2, setBestScoreL2] = useState(0);
+      const [bestScoreL3, setBestScoreL3] = useState(0);
+      const [bestScoreL4, setBestScoreL4] = useState(0);
+
+      const handleUpdateL1 = (score) => setBestScoreL1(prev => Math.max(prev, score - 1));
+      const handleUpdateL2 = (score) => setBestScoreL2(prev => Math.max(prev, score));
+      const handleUpdateL3 = (score) => setBestScoreL3(prev => Math.max(prev, score));
+      const handleUpdateL4 = (score) => setBestScoreL4(prev => Math.max(prev, score));
+
+      const selectLevel = (level) => {
+        initAudio(); 
+        SFX.click();
+        setCurrentView(level);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-slate-900 text-slate-100 font-sans selection:bg-cyan-900 overflow-hidden">
+          <style>{globalStyles}</style>
+
+          <div className="w-full h-full max-w-6xl mx-auto flex flex-col">
+            <header className="p-3 md:p-6 flex justify-between items-center border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm z-20 shrink-0">
+              <div className="flex items-center space-x-2 md:space-x-3">
+                <span className="text-2xl md:text-3xl">🛸</span>
+                <h1 className="text-lg md:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 tracking-wider">
+                  機甲整備基地
+                </h1>
+              </div>
+              <div className="flex space-x-2">
+                 <div className="text-slate-400 text-xs md:text-sm font-mono border border-slate-700 px-2 py-1 rounded-full bg-slate-800 hidden sm:block">
+                   ID: Alpha駕駛員
+                 </div>
+              </div>
+            </header>
+
+            <main className="flex-1 overflow-y-auto flex flex-col items-center p-3 md:p-6 relative">
+              {currentView === 'menu' && (
+                <div className="flex flex-col items-center w-full max-w-5xl space-y-4 md:space-y-8">
+                  <div className="text-center space-y-1 md:space-y-4 mt-2 shrink-0">
+                    <h2 className="text-2xl md:text-4xl font-bold text-slate-200">指揮中心</h2>
+                    <p className="text-xs md:text-base text-slate-400 hidden sm:block">選擇任務啟動機甲，爭取最高天梯榮耀！</p>
+                  </div>
+
+                  {/* 戰績排行榜 (手機橫向捲動或濃縮排版) */}
+                  <div className="w-full bg-slate-800/80 border-2 border-yellow-500/30 rounded-2xl p-3 md:p-4 grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 shadow-inner shrink-0">
+                     <div className="flex items-center justify-center space-x-2">
+                        <span className="text-xl md:text-3xl">🏆</span>
+                        <div>
+                          <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase">啟動進度</p>
+                          <p className="text-lg md:text-2xl font-black text-emerald-400">{bestScoreL1} <span className="text-[10px] md:text-sm text-slate-500">/100</span></p>
+                        </div>
+                     </div>
+                     <div className="flex items-center justify-center space-x-2">
+                        <span className="text-xl md:text-3xl">🔥</span>
+                        <div>
+                          <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase">工程鍛造</p>
+                          <p className="text-lg md:text-2xl font-black text-orange-400">{bestScoreL2} <span className="text-[10px] md:text-sm text-slate-500">次</span></p>
+                        </div>
+                     </div>
+                     <div className="flex items-center justify-center space-x-2">
+                        <span className="text-xl md:text-3xl">🧮</span>
+                        <div>
+                          <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase">算力校準</p>
+                          <p className="text-lg md:text-2xl font-black text-purple-400">{bestScoreL3} <span className="text-[10px] md:text-sm text-slate-500">次</span></p>
+                        </div>
+                     </div>
+                     <div className="flex items-center justify-center space-x-2">
+                        <span className="text-xl md:text-3xl">🎯</span>
+                        <div>
+                          <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase">實戰解題</p>
+                          <p className="text-lg md:text-2xl font-black text-pink-400">{bestScoreL4} <span className="text-[10px] md:text-sm text-slate-500">題</span></p>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* 關卡選單 (垂直排列為主，適應手機上下滑動) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-6 w-full pb-8">
+                    <div onClick={() => selectLevel('level1')} className="group cursor-pointer relative bg-slate-800 rounded-2xl p-4 md:p-6 border-2 border-slate-700 hover:border-emerald-500 transition-all duration-300 overflow-hidden hover:-translate-y-1 flex flex-col h-full">
+                      <div className="absolute top-0 right-0 p-2 md:p-4 opacity-10 text-6xl md:text-8xl pointer-events-none">⚡</div>
+                      <h3 className="text-xl md:text-2xl font-bold text-emerald-400 mb-1">任務一：基地啟動</h3>
+                      <p className="text-slate-400 mb-3 text-xs md:text-sm flex-1">拖曳能量塊至下方插槽，完成1到100的充能。</p>
+                      <div><span className="inline-block bg-emerald-900/50 text-emerald-300 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-emerald-700">認識數字順序</span></div>
+                    </div>
+
+                    <div onClick={() => selectLevel('level2')} className="group cursor-pointer relative bg-slate-800 rounded-2xl p-4 md:p-6 border-2 border-slate-700 hover:border-orange-500 transition-all duration-300 overflow-hidden hover:-translate-y-1 flex flex-col h-full">
+                       <div className="absolute top-0 right-0 p-2 md:p-4 opacity-10 text-6xl md:text-8xl pointer-events-none">🔥</div>
+                      <h3 className="text-xl md:text-2xl font-bold text-orange-400 mb-1">任務二：核心工程室</h3>
+                      <p className="text-slate-400 mb-3 text-xs md:text-sm flex-1">挑選正確數字零件放入合成爐，鍛造出終極神裝。</p>
+                      <div><span className="inline-block bg-orange-900/50 text-orange-300 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-orange-700">合成與分解</span></div>
+                    </div>
+
+                    <div onClick={() => selectLevel('level3')} className="group cursor-pointer relative bg-slate-800 rounded-2xl p-4 md:p-6 border-2 border-slate-700 hover:border-purple-500 transition-all duration-300 overflow-hidden hover:-translate-y-1 flex flex-col h-full">
+                       <div className="absolute top-0 right-0 p-2 md:p-4 opacity-10 text-6xl md:text-8xl pointer-events-none">🧮</div>
+                      <h3 className="text-xl md:text-2xl font-bold text-purple-400 mb-1">任務三：算力校準</h3>
+                      <p className="text-slate-400 mb-3 text-xs md:text-sm flex-1">操作能量珠算儀，撥動上5下1的珠子達成目標數值。</p>
+                      <div><span className="inline-block bg-purple-900/50 text-purple-300 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-purple-700">珠算概念啟蒙</span></div>
+                    </div>
+
+                    <div onClick={() => selectLevel('level4')} className="group cursor-pointer relative bg-slate-800 rounded-2xl p-4 md:p-6 border-2 border-slate-700 hover:border-pink-500 transition-all duration-300 overflow-hidden hover:-translate-y-1 flex flex-col h-full">
+                       <div className="absolute top-0 right-0 p-2 md:p-4 opacity-10 text-6xl md:text-8xl pointer-events-none">🎯</div>
+                      <h3 className="text-xl md:text-2xl font-bold text-pink-400 mb-1">任務四：實戰演練</h3>
+                      <p className="text-slate-400 mb-3 text-xs md:text-sm flex-1">接受司令部指派的加減法算式任務，利用算盤解答！</p>
+                      <div><span className="inline-block bg-pink-900/50 text-pink-300 text-[10px] md:text-xs font-bold px-2 py-1 rounded-full border border-pink-700">算盤加減法應用</span></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentView === 'level1' && <Level1 onBack={() => selectLevel('menu')} updateScore={handleUpdateL1} />}
+              {currentView === 'level2' && <Level2 onBack={() => selectLevel('menu')} updateScore={handleUpdateL2} />}
+              {currentView === 'level3' && <Level3 onBack={() => selectLevel('menu')} updateScore={handleUpdateL3} />}
+              {currentView === 'level4' && <Level4 onBack={() => selectLevel('menu')} updateScore={handleUpdateL4} />}
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

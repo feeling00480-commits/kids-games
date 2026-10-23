@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 機甲戰鬥原型 (Custom Model Fix)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+
+        #hangar-ui {
+            display: flex; flex-direction: column; justify-content: space-between; height: 100%;
+            background: radial-gradient(circle, transparent 50%, #000 100%); pointer-events: auto;
+        }
+        .hangar-header { text-align: center; padding: 20px; color: #fff; text-shadow: 0 0 10px #0af; }
+        .hangar-header h1 { margin: 0; letter-spacing: 5px; font-size: 40px; }
+        .hangar-controls { display: flex; align-items: center; justify-content: center; padding-bottom: 20px; gap: 40px; }
+        
+        .mecha-info { text-align: center; color: #fff; width: 350px; }
+        .mecha-name { font-size: 32px; font-weight: bold; color: #0af; margin-bottom: 10px; }
+        .mecha-desc { font-size: 14px; color: #aaa; line-height: 1.5; }
+        
+        #custom-options {
+            display: none; flex-direction: column; gap: 10px; background: rgba(0, 50, 80, 0.6);
+            padding: 15px; border: 1px solid #0af; margin-top: 15px; pointer-events: auto;
+        }
+        select, input[type=file] {
+            background: #000; color: #0af; border: 1px solid #0af; padding: 5px; font-family: inherit; width: 100%;
+        }
+        label { font-size: 12px; color: #0af; text-align: left; display: block; margin-bottom: 2px; }
+
+        .btn {
+            background: rgba(0, 20, 40, 0.8); border: 2px solid #0af; color: #0af; padding: 15px 30px;
+            font-size: 18px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 2px;
+        }
+        .btn:hover { background: #0af; color: #000; box-shadow: 0 0 20px #0af; }
+        .btn-launch { font-size: 24px; padding: 20px 60px; font-weight: bold; border-color: #f00; color: #f00; }
+        .btn-launch:hover { background: #f00; color: #fff; box-shadow: 0 0 30px #f00; }
+
+        #combat-hud { display: none; }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 40px; height: 40px;
+            transform: translate(-50%, -50%); 
+            border: 2px solid rgba(0, 255, 255, 0.8); border-radius: 50%; 
+            transition: all 0.1s; box-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+        }
+        #crosshair::before { 
+            content: ''; position: absolute; top: 50%; left: -15px; right: -15px; height: 2px; 
+            background: rgba(0, 255, 255, 0.8); transform: translateY(-50%);
+        }
+        #crosshair::after { 
+            content: ''; position: absolute; left: 50%; top: -15px; bottom: -15px; width: 2px; 
+            background: rgba(0, 255, 255, 0.8); transform: translateX(-50%);
+        }
+        #crosshair.locking { 
+            border-color: #ffaa00; width: 60px; height: 60px; border-style: dashed; animation: spin 1s infinite linear; 
+        }
+        #crosshair.locking::before, #crosshair.locking::after { background: #ffaa00; }
+        #crosshair.locked { 
+            border-color: #ff0000; width: 40px; height: 40px; border-style: solid; background: rgba(255,0,0,0.1); 
+            transform: translate(-50%, -50%) rotate(45deg); 
+        }
+        #crosshair.locked::before, #crosshair.locked::after { background: #ff0000; width: 0; height: 0; }
+        
+        #lock-indicator {
+            position: absolute; width: 50px; height: 50px; border: 2px solid #f00; display: none;
+            box-shadow: 0 0 10px #f00; transform: translate(-50%, -50%);
+        }
+
+        #status-panel {
+            position: absolute; bottom: 40px; right: 40px; width: 300px;
+            padding: 15px; background: rgba(0,0,0,0.7); border-right: 5px solid #fff; color: #fff; text-align: right;
+        }
+        .bar-bg { width: 100%; height: 8px; background: #333; margin: 5px 0; }
+        .bar-fill { height: 100%; width: 100%; background: #0af; transition: width 0.1s; }
+        #weapon-name { font-size: 24px; font-weight: bold; }
+
+        #radar-panel {
+            position: absolute; bottom: 40px; left: 40px; width: 200px;
+            color: #aaa; font-size: 12px; line-height: 1.6;
+        }
+
+        @keyframes spin { 100% { transform: translate(-50%,-50%) rotate(360deg); } }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <div id="hangar-ui">
+        <div class="hangar-header">
+            <h1>MECHA HANGAR</h1>
+            <p>SELECT YOUR MOBILE SUIT</p>
+        </div>
+        <div class="hangar-controls">
+            <button class="btn btn-arrow" onclick="prevMecha()">&lt;</button>
+            <div class="mecha-info">
+                <div class="mecha-name" id="menu-name">TYPE-01</div>
+                <div class="mecha-desc" id="menu-desc">Standard balanced unit.</div>
+                
+                <div id="custom-options">
+                    <label>UPLOAD MODEL (.GLB)</label>
+                    <input type="file" id="model-input" accept=".glb,.gltf" onchange="handleModelUpload(this)">
+                    <label>LEFT ARM (PRIMARY)</label>
+                    <select id="wep-l-select" onchange="updateCustomLoadout()">
+                        <option value="GATLING">Gatling Cannon</option>
+                        <option value="SMG">Sub-Machine Gun</option>
+                        <option value="MAGNUM">Beam Magnum</option>
+                    </select>
+                    <label>RIGHT ARM (SECONDARY)</label>
+                    <select id="wep-r-select" onchange="updateCustomLoadout()">
+                        <option value="MISSILES">Homing Missiles</option>
+                        <option value="FUNNELS">Shield Funnels</option>
+                        <option value="DUAL_SPEAR">Beam Spear</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-arrow" onclick="nextMecha()">&gt;</button>
+        </div>
+        <div style="text-align: center; margin-bottom: 50px;">
+            <button class="btn btn-launch" onclick="launchGame()">LAUNCH MISSION</button>
+        </div>
+    </div>
+
+    <div id="combat-hud">
+        <div id="crosshair"></div>
+        <div id="lock-indicator"></div>
+        <div id="status-panel">
+            <div id="weapon-name">WEAPON</div>
+            <div>THRUSTER</div>
+            <div class="bar-bg"><div class="bar-fill" id="energy-bar"></div></div>
+            <div>ARMOR</div>
+            <div class="bar-bg"><div class="bar-fill" style="background:#ccc; width:100%"></div></div>
+            <div style="font-size: 12px; margin-top:5px">VEL: <span id="vel-disp">0</span></div>
+        </div>
+        <div id="radar-panel">
+            HOSTILES: <span id="target-count" style="color:#fff; font-size:1.5em">0</span><br>
+            MODE: COMBAT<br>
+            WASD: Move | SPACE: Up
+        </div>
+    </div>
+
+    <script>
+        let camera, scene, renderer;
+        let clock = new THREE.Clock();
+        let gameState = 'HANGAR'; 
+        
+        let playerGroup, torsoGroup;
+        let rightArm, leftArm, gunMesh, subWeaponMesh, missileLauncherMesh; 
+        let currentMechaType = 0; 
+        let velocity = new THREE.Vector3();
+        
+        let customModelURL = null;
+        let customModelScene = null; 
+        let customConfig = { w1: 'GATLING', w2: 'MISSILES' };
+
+        let targets = [];
+        let beams = [];
+        let missiles = [];
+        let funnels = []; 
+        let bladeWaves = []; 
+        let obstacles = [];
+        let activeParticles = []; 
+        
+        let moveState = { f:0, b:0, l:0, r:0, u:0, d:0 };
+        let isFiring = false;
+        let isLocking = false;
+        let lockTimer = 0;
+        let lockedTarget = null;
+        let lastShotTime = 0;
+        
+        const LOCK_TIME = 0.5;
+        const TARGET_HP = 5;
+        const MAX_SPEED = 2.8;
+        const ACCELERATION = 2.5; 
+        const FRICTION = 2.0; 
+        const ROTATION_SPEED = 0.002;
+        const PLAYER_RADIUS = 4.0;
+
+        const MECHA_DB = [
+            {
+                name: "HEAVY ARMORED",
+                desc: "Heavily armored unit. Equipped with Missile Pods and Gatling Cannon.",
+                createFunc: createHeavyMecha,
+                color: "#ffaa00", 
+                weapon1: "GATLING",
+                weapon2: "MISSILES"
+            },
+            {
+                name: "TYPE-E (HIGH MOBILITY)",
+                desc: "Slender unit specialized in close combat. Equipped with SMG and Dual Spears.",
+                createFunc: createEvaMecha,
+                color: "#aa00ff",
+                weapon1: "SMG",
+                weapon2: "DUAL_SPEAR"
+            },
+            {
+                name: "RX-0 PSYCHO FRAME",
+                desc: "Advanced prototype with Beam Magnum and Shield Funnels.",
+                createFunc: createUnicornMecha,
+                color: "#ff0000",
+                weapon1: "MAGNUM",
+                weapon2: "FUNNELS"
+            },
+            {
+                name: "CUSTOM FRAME",
+                desc: "Import your own MS data (.glb) and customize loadout.",
+                createFunc: createCustomMecha,
+                color: "#00ffaa",
+                weapon1: "CUSTOM", 
+                weapon2: "CUSTOM"
+            }
+        ];
+
+        const sharedParticleGeo = new THREE.PlaneGeometry(1, 1);
+        const sharedBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const sharedSphereGeo = new THREE.SphereGeometry(1, 8, 8);
+        const particlePool = [];
+        const MAX_PARTICLES = 3000; 
+
+        const collisionRaycaster = new THREE.Raycaster();
+        let audioCtx;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.FogExp2(0x050505, 0.001);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 8000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0x404040, 1.2);
+            scene.add(ambient);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight.position.set(-50, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            enterHangarMode();
+
+            window.addEventListener('resize', onResize);
+            document.addEventListener('keydown', onKey.bind(null, true));
+            document.addEventListener('keyup', onKey.bind(null, false));
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('mousemove', onMouseMove);
+            
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement !== renderer.domElement && gameState === 'PLAYING') { }
+            });
+        }
+
+        // --- Core ---
+        function handleWeapons(dt) {
+            let w1 = MECHA_DB[currentMechaType].weapon1;
+            if (w1 === 'CUSTOM') w1 = customConfig.w1;
+
+            if (isFiring) {
+                if (w1 === "GATLING") fireGatling();
+                else if (w1 === "SMG") fireSMG();
+                else if (w1 === "MAGNUM") fireMagnum();
+            }
+            if (isLocking) updateLockProcess(dt);
+            updateFunnels(dt);
+            updateBladeWaves(dt);
+        }
+
+        function stopLockingAndFire() {
+            isLocking = false;
+            document.getElementById('crosshair').classList.remove('locking');
+            document.getElementById('crosshair').classList.remove('locked');
+            document.getElementById('lock-indicator').style.display = 'none';
+
+            let w2 = MECHA_DB[currentMechaType].weapon2;
+            if (w2 === 'CUSTOM') w2 = customConfig.w2;
+
+            if (w2 === "MISSILES" && lockedTarget) fireMissiles(lockedTarget);
+            else if (w2 === "FUNNELS" && lockedTarget) deployFunnels(lockedTarget);
+            else if (w2 === "DUAL_SPEAR") performSpearAttack();
+            
+            lockedTarget = null;
+        }
+
+        function handleModelUpload(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                customModelURL = URL.createObjectURL(file);
+                const loader = new THREE.GLTFLoader();
+                loader.load(customModelURL, (gltf) => {
+                    customModelScene = gltf.scene;
+                    if (gameState === 'HANGAR' && currentMechaType === 3) {
+                        buildCurrentMecha(true);
+                    }
+                });
+            }
+        }
+
+        function updateCustomLoadout() {
+            customConfig.w1 = document.getElementById('wep-l-select').value;
+            customConfig.w2 = document.getElementById('wep-r-select').value;
+            if (gameState === 'HANGAR' && currentMechaType === 3) {
+                buildCurrentMecha(true);
+            }
+        }
+
+        function createCustomMecha() {
+            playerGroup = new THREE.Group();
+            playerGroup.rotation.order = 'YXZ';
+            torsoGroup = new THREE.Group();
+            playerGroup.add(torsoGroup);
+
+            rightArm = null; leftArm = null; gunMesh = null; subWeaponMesh = null; missileLauncherMesh = null;
+
+            if (customModelScene) {
+                const model = customModelScene.clone();
+                const box = new THREE.Box3().setFromObject(model);
+                const size = new THREE.Vector3(); box.getSize(size);
+                
+                // FIX: 降低縮放比例，避免擋住視線
+                const targetHeight = 4.5; // 原本是 8.0，現在改小
+                const scale = targetHeight / size.y;
+                model.scale.set(scale, scale, scale);
+                model.position.y = -box.min.y * scale; 
+                torsoGroup.add(model);
+
+                let rHand = findBone(model, ['RightHand', 'right_hand', 'Hand_R', 'mixamorig:RightHand']);
+                let lHand = findBone(model, ['LeftHand', 'left_hand', 'Hand_L', 'mixamorig:LeftHand']);
+
+                // 如果找到骨架，直接使用骨架；否則建立虛擬掛點
+                // FIX: 調整虛擬掛點位置，適配較小的模型
+                if (!rHand) { 
+                    rHand = new THREE.Group(); 
+                    rHand.position.set(-1.5, 1.8, 0.5); // 內縮並降低
+                    torsoGroup.add(rHand); 
+                }
+                if (!lHand) { 
+                    lHand = new THREE.Group(); 
+                    lHand.position.set(1.5, 1.8, 0.5); 
+                    torsoGroup.add(lHand); 
+                }
+                rightArm = rHand; leftArm = lHand;
+
+                const pack = new THREE.Group(); pack.name = "backpack";
+                pack.userData.thrusterLocs = [new THREE.Vector3(0, 2.5, -0.5)];
+                torsoGroup.add(pack);
+            } else {
+                const wireMat = new THREE.MeshBasicMaterial({color: 0x00ffaa, wireframe:true});
+                const box = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 1), wireMat);
+                box.position.y = 2; torsoGroup.add(box);
+                rightArm = new THREE.Group(); rightArm.position.set(-1.5, 3, 0); torsoGroup.add(rightArm);
+                leftArm = new THREE.Group(); leftArm.position.set(1.5, 3, 0); torsoGroup.add(leftArm);
+                const pack = new THREE.Group(); pack.name = "backpack"; pack.userData.thrusterLocs = []; torsoGroup.add(pack);
+            }
+
+            // FIX: 重置武器位置，避免在 Custom 模式下繼承奇怪的偏移
+            const resetWeapon = (mesh) => {
+                mesh.position.set(0, 0, 0); 
+                mesh.rotation.set(0, 0, 0);
+                // 大部分武器預設朝 -Z 或 Y-，視模型而定。這裡統一轉 -PI/2 讓其朝前
+                mesh.rotation.x = -Math.PI/2; 
+            };
+
+            const w1Type = customConfig.w1;
+            if (w1Type === 'GATLING') { gunMesh = createGatlingMesh(); resetWeapon(gunMesh); leftArm.add(gunMesh); }
+            else if (w1Type === 'SMG') { gunMesh = createSmgMesh(); resetWeapon(gunMesh); leftArm.add(gunMesh); }
+            else if (w1Type === 'MAGNUM') { gunMesh = createMagnumMesh(); resetWeapon(gunMesh); leftArm.add(gunMesh); }
+
+            const w2Type = customConfig.w2;
+            if (w2Type === 'MISSILES') { 
+                subWeaponMesh = createMissilePodMesh(); 
+                resetWeapon(subWeaponMesh);
+                missileLauncherMesh = subWeaponMesh; 
+                rightArm.add(subWeaponMesh); 
+            }
+            else if (w2Type === 'FUNNELS') { 
+                subWeaponMesh = createFunnelRack(); 
+                // Funnel rack needs specific rotation
+                subWeaponMesh.rotation.set(0, 0, -Math.PI/2); 
+                rightArm.add(subWeaponMesh); 
+            }
+            else if (w2Type === 'DUAL_SPEAR') { 
+                subWeaponMesh = createSpearMesh(); 
+                resetWeapon(subWeaponMesh);
+                rightArm.add(subWeaponMesh); 
+            }
+
+            scene.add(playerGroup);
+        }
+
+        function findBone(object, names) {
+            let found = null;
+            object.traverse((child) => {
+                if (found) return;
+                const name = child.name.toLowerCase();
+                for (let n of names) {
+                    if (name.includes(n.toLowerCase())) { found = child; return; }
+                }
+            });
+            return found;
+        }
+
+        // Weapon Factories
+        function createGatlingMesh() {
+            const g = new THREE.Group();
+            addBox(g, 0.8, 0.8, 3.0, new THREE.MeshStandardMaterial({color:0x222}), 0,0,-1); 
+            return g;
+        }
+        function createSmgMesh() {
+            const g = new THREE.Group();
+            addBox(g, 0.4, 1.0, 1.5, new THREE.MeshStandardMaterial({color:0x333}), 0,0,-0.5);
+            return g;
+        }
+        function createMagnumMesh() {
+            const g = new THREE.Group();
+            const matPsycho = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
+            addBox(g, 0.5, 1.0, 3.5, new THREE.MeshStandardMaterial({color:0x888}), 0, 0, -1.0);
+            addBox(g, 0.6, 0.6, 1.0, matPsycho, 0, -0.5, -0.5);
+            return g;
+        }
+        function createMissilePodMesh() {
+            const g = new THREE.Group();
+            const matDetail = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+            addBox(g, 1.0, 1.5, 2.0, new THREE.MeshStandardMaterial({color:0x333}), 0,0,0); 
+            addBox(g, 0.8, 1.2, 0.1, matDetail, 0,0,-1.0);
+            return g;
+        }
+        function createSpearMesh() {
+            const g = new THREE.Group();
+            addBox(g, 0.1, 3.0, 0.1, new THREE.MeshStandardMaterial({color:0x999}), 0, 1.0, 0);
+            addBox(g, 0.1, 1.5, 0.4, new THREE.MeshStandardMaterial({color:0xff0000, emissive:0xff0000}), 0, 2.5, 0);
+            addBox(g, 0.1, 1.5, 0.4, new THREE.MeshStandardMaterial({color:0xff0000, emissive:0xff0000}), 0, -0.5, 0);
+            return g;
+        }
+        function createFunnelRack() {
+            const g = new THREE.Group();
+            const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const matPsycho = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            for(let i=0; i<5; i++) {
+                const s = createShieldMesh(matWhite, matPsycho);
+                s.position.set(0, i * 0.2, 0); s.rotation.x = Math.PI / 2; s.userData.isFunnel = true;
+                g.add(s);
+            }
+            return g;
+        }
+
+        // --- Common ---
+        function getAimPoint() {
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const allTargets = targets.map(t => t.mesh).concat(obstacles);
+            const hits = ray.intersectObjects(allTargets);
+            if (hits.length > 0) return hits[0].point;
+            else return ray.ray.at(3000, new THREE.Vector3()); 
+        }
+
+        function getParticleFromPool(type = 'plane') {
+            let p;
+            if (particlePool.length > 0) {
+                p = particlePool.pop();
+            } else {
+                let geo, mat;
+                if (type === 'sphere') {
+                    geo = sharedSphereGeo;
+                    mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+                } else if (type === 'box') {
+                    geo = sharedBoxGeo;
+                    mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                } else {
+                    geo = sharedParticleGeo;
+                    mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide });
+                }
+                const mesh = new THREE.Mesh(geo, mat);
+                scene.add(mesh);
+                p = { mesh: mesh, velocity: new THREE.Vector3(), life: 0, maxLife: 0, isBlast: false, type: type };
+            }
+            p.mesh.visible = true;
+            p.mesh.scale.set(1,1,1);
+            p.mesh.rotation.set(0,0,0);
+            return p;
+        }
+
+        function releaseParticle(p) {
+            p.mesh.visible = false;
+            if (particlePool.length < MAX_PARTICLES) {
+                particlePool.push(p);
+            } else {
+                scene.remove(p.mesh);
+                if (p.mesh.material) p.mesh.material.dispose();
+            }
+        }
+
+        function enterHangarMode() {
+            gameState = 'HANGAR';
+            document.getElementById('hangar-ui').style.display = 'flex';
+            document.getElementById('combat-hud').style.display = 'none';
+            document.exitPointerLock();
+            clearSceneEntities();
+            camera.position.set(0, 5, 22); camera.lookAt(0, 5, 0);        
+            const grid = new THREE.GridHelper(50, 20, 0x00ffff, 0x111111);
+            scene.add(grid); obstacles.push(grid); 
+            buildCurrentMecha(true); updateHangarUI();
+        }
+
+        function launchGame() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            gameState = 'PLAYING';
+            document.getElementById('hangar-ui').style.display = 'none';
+            document.getElementById('combat-hud').style.display = 'block';
+            renderer.domElement.requestPointerLock().catch(e=>{});
+            obstacles.forEach(o => scene.remove(o));
+            obstacles = [];
+            createEnvironment();
+            playerGroup.position.set(0, 0, 0);
+            playerGroup.rotation.set(0, 0, 0);
+            velocity.set(0, 0, 0);
+            for(let i=0; i<15; i++) spawnTarget();
+        }
+
+        function clearSceneEntities() {
+            if(playerGroup) scene.remove(playerGroup);
+            targets.forEach(t => scene.remove(t.mesh)); targets = [];
+            beams.forEach(b => scene.remove(b.mesh)); beams = [];
+            missiles.forEach(m => scene.remove(m.mesh)); missiles = [];
+            funnels.forEach(f => scene.remove(f.mesh)); funnels = [];
+            bladeWaves.forEach(w => scene.remove(w.mesh)); bladeWaves = [];
+            activeParticles.forEach(p => releaseParticle(p));
+            activeParticles = [];
+        }
+
+        window.prevMecha = () => { currentMechaType = (currentMechaType - 1 + MECHA_DB.length) % MECHA_DB.length; buildCurrentMecha(true); updateHangarUI(); };
+        window.nextMecha = () => { currentMechaType = (currentMechaType + 1) % MECHA_DB.length; buildCurrentMecha(true); updateHangarUI(); };
+        window.launchGame = launchGame; 
+
+        function updateHangarUI() {
+            const data = MECHA_DB[currentMechaType];
+            document.getElementById('menu-name').innerText = data.name;
+            document.getElementById('menu-desc').innerText = data.desc;
+            document.getElementById('menu-name').style.color = data.color;
+            document.querySelector('.bar-fill').style.background = data.color;
+            document.getElementById('crosshair').style.borderColor = data.color;
+            
+            const customPanel = document.getElementById('custom-options');
+            if (data.weapon1 === 'CUSTOM') {
+                customPanel.style.display = 'flex';
+                document.getElementById('menu-desc').style.display = 'none'; 
+            } else {
+                customPanel.style.display = 'none';
+                document.getElementById('menu-desc').style.display = 'block';
+            }
+
+            const style = document.createElement('style');
+            style.innerHTML = `
+                #crosshair::before, #crosshair::after { background: ${data.color}; }
+                #crosshair { border-color: ${data.color}; box-shadow: 0 0 5px ${data.color}; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function buildCurrentMecha(isHangar) {
+            if(playerGroup) scene.remove(playerGroup);
+            MECHA_DB[currentMechaType].createFunc(); 
+            if(isHangar) playerGroup.position.set(0, 9.0, 0); 
+        }
+
+        function createHeavyMecha() {
+            playerGroup = new THREE.Group(); playerGroup.rotation.order = 'YXZ';
+            torsoGroup = new THREE.Group(); playerGroup.add(torsoGroup);
+            const matArmor = new THREE.MeshStandardMaterial({ color: 0x334433, roughness: 0.7, metalness: 0.4 });
+            const matDark = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+            const matDetail = new THREE.MeshStandardMaterial({ color: 0xff8800 });
+            addBox(torsoGroup, 3.0, 2.0, 2.5, matArmor, 0, 2.5, 0); 
+            addBox(torsoGroup, 2.0, 1.0, 1.0, matDark, 0, 2.5, 1.3);
+            const head = new THREE.Group(); head.position.set(0, 3.8, -0.2);
+            addBox(head, 1.2, 1.0, 1.4, matArmor, 0,0,0);
+            addBox(head, 1.0, 0.4, 0.2, new THREE.MeshBasicMaterial({color:0x00ffcc}), 0, 0.1, -0.7); 
+            torsoGroup.add(head);
+            const pack = new THREE.Group(); pack.name = "backpack";
+            pack.userData.thrusterLocs = [new THREE.Vector3(1.2, -0.5, 1.0), new THREE.Vector3(-1.2, -0.5, 1.0)];
+            addBox(pack, 2.8, 2.5, 1.5, matArmor, 0, 3.0, 1.5);
+            addBox(pack, 0.8, 1.2, 0.5, matDark, 1.2, 2.5, 2.3); 
+            addBox(pack, 0.8, 1.2, 0.5, matDark, -1.2, 2.5, 2.3);
+            torsoGroup.add(pack);
+            rightArm = createArm(matDark, -2.5, 2.8);
+            leftArm = createArm(matDark, 2.5, 2.8);
+            createLeg(torsoGroup, -1.4, matArmor, 1.5, 1.8, 2.2);
+            createLeg(torsoGroup, 1.4, matArmor, 1.5, 1.8, 2.2);
+            subWeaponMesh = createMissilePodMesh();
+            missileLauncherMesh = subWeaponMesh;
+            subWeaponMesh.rotation.x = -Math.PI/2; subWeaponMesh.position.set(0, -2.5, 0);
+            rightArm.add(subWeaponMesh);
+            gunMesh = createGatlingMesh();
+            gunMesh.rotation.x = -Math.PI/2; gunMesh.position.set(0, -2.5, 0);
+            leftArm.add(gunMesh);
+            scene.add(playerGroup);
+        }
+
+        function createEvaMecha() {
+            playerGroup = new THREE.Group(); playerGroup.rotation.order = 'YXZ';
+            torsoGroup = new THREE.Group(); playerGroup.add(torsoGroup);
+            const matBody = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); 
+            const matDetail = new THREE.MeshStandardMaterial({ color: 0xaa00ff }); 
+            const matGreen = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            addBox(torsoGroup, 1.0, 2.5, 1.0, matDetail, 0, 2.0, 0); 
+            addBox(torsoGroup, 1.5, 1.0, 1.2, matBody, 0, 3.2, 0); 
+            const head = new THREE.Group(); head.position.set(0, 4.0, 0);
+            addBox(head, 0.6, 0.8, 0.8, matDetail, 0, 0, 0);
+            addBox(head, 0.1, 0.5, 0.1, matGreen, 0, 0.5, 0);
+            torsoGroup.add(head);
+            const pack = new THREE.Group(); pack.name = "backpack";
+            pack.userData.thrusterLocs = [new THREE.Vector3(0,0,0.5)];
+            addBox(pack, 0.8, 1.5, 0.5, matBody, 0, 2.5, 0.8);
+            torsoGroup.add(pack);
+            rightArm = createArm(matDetail, -1.5, 3.0, 0.5, 2.0); 
+            leftArm = createArm(matDetail, 1.5, 3.0, 0.5, 2.0);
+            createLeg(torsoGroup, -0.8, matDetail, 0.7, 0.8, 2.2); 
+            createLeg(torsoGroup, 0.8, matDetail, 0.7, 0.8, 2.2);
+            gunMesh = createSmgMesh();
+            gunMesh.rotation.x = -Math.PI/2; gunMesh.position.set(0, -2.5, 0.5);
+            leftArm.add(gunMesh);
+            subWeaponMesh = createSpearMesh();
+            subWeaponMesh.rotation.x = -Math.PI/2; subWeaponMesh.position.set(0, -2.5, 0);
+            rightArm.add(subWeaponMesh);
+            missileLauncherMesh = null; 
+            scene.add(playerGroup);
+        }
+
+        function createUnicornMecha() {
+            playerGroup = new THREE.Group(); playerGroup.rotation.order = 'YXZ';
+            torsoGroup = new THREE.Group(); playerGroup.add(torsoGroup);
+            const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const matPsycho = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
+            addBox(torsoGroup, 2.0, 2.0, 1.5, matWhite, 0, 2.0, 0);
+            addBox(torsoGroup, 2.1, 0.2, 1.6, matPsycho, 0, 2.5, 0);
+            addBox(torsoGroup, 0.5, 1.8, 1.6, matPsycho, 0, 2.0, 0);
+            const head = new THREE.Group(); head.position.set(0, 3.3, 0);
+            addBox(head, 0.9, 0.9, 1.0, matWhite, 0,0,0);
+            addBox(head, 0.1, 0.8, 0.6, matPsycho, 0, 0.6, -0.2); 
+            torsoGroup.add(head);
+            const pack = new THREE.Group(); pack.name = "backpack";
+            pack.userData.thrusterLocs = [new THREE.Vector3(0.8, -0.5, 0.5), new THREE.Vector3(-0.8, -0.5, 0.5)];
+            addBox(pack, 2.0, 2.0, 1.0, new THREE.MeshStandardMaterial({color:0x000033}), 0, 2.5, 1.0);
+            torsoGroup.add(pack);
+            rightArm = createArm(matWhite, -2.2, 2.5);
+            leftArm = createArm(matWhite, 2.2, 2.5);
+            createLeg(torsoGroup, -1.0, matWhite, 1.0, 1.2, 2.0);
+            createLeg(torsoGroup, 1.0, matWhite, 1.0, 1.2, 2.0);
+            
+            // Magnum
+            gunMesh = createMagnumMesh();
+            gunMesh.rotation.x = -Math.PI/2; gunMesh.position.set(0, -2.0, 0.5);
+            rightArm.add(gunMesh);
+            
+            // Funnel Rack (Moved to Right Arm Outer)
+            subWeaponMesh = createFunnelRack();
+            subWeaponMesh.position.set(-0.8, -1.0, 0.5); // Fixed: Outer (-0.8)
+            subWeaponMesh.rotation.z = -Math.PI / 2;     // Fixed: Rotate out
+            rightArm.add(subWeaponMesh);
+            
+            missileLauncherMesh = null;
+            scene.add(playerGroup);
+        }
+
+        function addBox(parent, w, h, d, mat, x, y, z) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+            mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
+        }
+        function createArm(mat, x, y, w=0.8, h=1.5) {
+            const group = new THREE.Group(); group.position.set(x, y, 0);
+            addBox(group, w, h, w, mat, 0, -h/2, 0); torsoGroup.add(group); return group;
+        }
+        function createLeg(parent, x, mat, w=1.2, d=1.5, h=2.0) {
+            const leg = new THREE.Group(); leg.position.set(x, 1.0, 0); parent.add(leg);
+            addBox(leg, w, h, d, mat, 0, -h/2, 0); addBox(leg, w*1.2, h*1.2, d*1.2, mat, 0, -h*1.5, 0.2); addBox(leg, w*1.4, 0.5, d*2.0, mat, 0, -h*2.2, 0.5);
+        }
+        function createShieldMesh(matMain, matFrame) {
+            const g = new THREE.Group();
+            addBox(g, 1.2, 2.5, 0.2, matMain, 0, 0, 0); addBox(g, 0.8, 1.5, 0.22, matFrame, 0, 0, 0); return g;
+        }
+
+        function createEnvironment() {
+            const gridHelper = new THREE.GridHelper(2000, 100, 0x444444, 0x111111); scene.add(gridHelper);
+            const geo = new THREE.BoxGeometry(20, 40, 20);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            for(let i=0; i<60; i++) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set((Math.random()-0.5)*1000, Math.random()*100, (Math.random()-0.5)*1000);
+                scene.add(mesh); obstacles.push(mesh);
+            }
+        }
+
+        function spawnTarget() {
+            const geo = new THREE.IcosahedronGeometry(6, 0);
+            const mat = new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0x330000 });
+            const target = new THREE.Mesh(geo, mat);
+            const angle = Math.random() * Math.PI * 2; const r = 100 + Math.random() * 300;
+            target.position.set(Math.sin(angle)*r, Math.random()*100+20, Math.cos(angle)*r);
+            const targetData = { mesh: target, hp: TARGET_HP, maxHp: TARGET_HP };
+            target.userData.wrapper = targetData; 
+            scene.add(target);
+            targets.push(targetData);
+            document.getElementById('target-count').innerText = targets.length;
+        }
+
+        function onKey(isDown, e) {
+            const val = isDown ? 1 : 0;
+            switch(e.code) {
+                case 'KeyW': moveState.f = val; break; case 'KeyS': moveState.b = val; break;
+                case 'KeyA': moveState.l = val; break; case 'KeyD': moveState.r = val; break;
+                case 'Space': moveState.u = val; break; case 'ShiftLeft': moveState.d = val; break;
+            }
+        }
+        function onMouseMove(e) {
+            if (gameState !== 'PLAYING') return;
+            playerGroup.rotation.y -= e.movementX * 0.002;
+            playerGroup.rotation.x -= e.movementY * 0.002;
+            // 360 view
+        }
+        function onMouseDown(e) { if (gameState !== 'PLAYING') return; if (e.button === 0) isFiring = true; if (e.button === 2) startLocking(); }
+        function onMouseUp(e) { if (e.button === 0) isFiring = false; if (e.button === 2) stopLockingAndFire(); }
+
+        function fireGatling() {
+            const now = Date.now();
+            if (now - lastShotTime < 60) return; lastShotTime = now;
+            createBeam(gunMesh, new THREE.Vector3(0, -2, 0), 0xffff00, 0.5, 10, 800, 1); 
+            playTone(200, 'square', 0.05);
+        }
+        function fireSMG() {
+            const now = Date.now(); if (now - lastShotTime < 50) return; lastShotTime = now;
+            createBeam(gunMesh, new THREE.Vector3(0, -2.5, 0.5), 0xffff00, 0.3, 5, 700, 0.8); 
+            playTone(400, 'sawtooth', 0.03);
+        }
+        function fireMagnum() {
+            const now = Date.now(); if (now - lastShotTime < 1500) return; lastShotTime = now;
+            
+            const beamGroup = new THREE.Group();
+            const beamLength = 3000; 
+            const outerGeo = new THREE.CylinderGeometry(2.5, 2.5, beamLength, 8);
+            outerGeo.translate(0, beamLength/2, 0); 
+            outerGeo.rotateX(Math.PI/2); 
+            const outerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+            const outerMesh = new THREE.Mesh(outerGeo, outerMat);
+            beamGroup.add(outerMesh);
+
+            const innerGeo = new THREE.CylinderGeometry(1.0, 1.0, beamLength, 8);
+            innerGeo.translate(0, beamLength/2, 0);
+            innerGeo.rotateX(Math.PI/2);
+            const innerMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+            beamGroup.add(innerMesh);
+
+            const pos = new THREE.Vector3(0, 0.5, -3.0); 
+            pos.applyMatrix4(gunMesh.matrixWorld);
+            beamGroup.position.copy(pos);
+            const targetPoint = getAimPoint();
+            beamGroup.lookAt(targetPoint);
+            scene.add(beamGroup);
+            
+            const beamData = { 
+                group: beamGroup, outer: outerMesh, timer: 0, maxTime: 0.5,
+                direction: new THREE.Vector3().subVectors(targetPoint, pos).normalize()
+            };
+            beamData.isIrradiation = true;
+            beams.push(beamData);
+
+            playTone(50, 'sawtooth', 0.8);
+            if(rightArm) {
+                rightArm.position.z += 1.5; 
+                setTimeout(() => { if(rightArm) rightArm.position.z -= 1.5; }, 300);
+            }
+        }
+
+        // 修改 createBeam 以接受 offset
+        function createBeam(originMesh, offsetLocal, color, width, length, speed, damage, isIrradiation, targetPosOverride) {
+            const geo = new THREE.CylinderGeometry(width, width, length, 8);
+            geo.rotateX(Math.PI/2); 
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            const beam = new THREE.Mesh(geo, mat);
+            const pos = offsetLocal.clone();
+            pos.applyMatrix4(originMesh.matrixWorld);
+            beam.position.copy(pos);
+            
+            const targetPoint = targetPosOverride ? targetPosOverride : getAimPoint();
+            beam.lookAt(targetPoint);
+            
+            scene.add(beam);
+            const velocity = new THREE.Vector3(0,0,1).applyQuaternion(beam.quaternion).multiplyScalar(speed);
+            beams.push({ mesh: beam, velocity: velocity, life: 2.0, damage: damage, isIrradiation: false });
+        }
+
+        function startLocking() { isLocking = true; lockTimer = 0; lockedTarget = null; document.getElementById('crosshair').classList.add('locking'); }
+        
+        function updateLockProcess(dt) {
+            if (!lockedTarget) {
+                let bestTargetWrapper = null;
+                let minAngle = Infinity;
+                const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+                targets.forEach(wrapper => {
+                    const tMesh = wrapper.mesh;
+                    const dist = playerGroup.position.distanceTo(tMesh.position);
+                    if (dist > 700) return;
+                    const toTarget = tMesh.position.clone().sub(camera.position).normalize();
+                    const angle = camDir.angleTo(toTarget);
+                    if (angle < 0.3 && angle < minAngle) { minAngle = angle; bestTargetWrapper = wrapper; }
+                });
+
+                if (bestTargetWrapper) {
+                    lockTimer += dt;
+                    const ind = document.getElementById('lock-indicator');
+                    ind.style.display = 'block';
+                    const pos = bestTargetWrapper.mesh.position.clone().project(camera);
+                    ind.style.left = (pos.x * .5 + .5) * window.innerWidth + 'px';
+                    ind.style.top = (-pos.y * .5 + .5) * window.innerHeight + 'px';
+                    if (lockTimer > 0.5) {
+                        lockedTarget = bestTargetWrapper; 
+                        document.getElementById('crosshair').classList.remove('locking');
+                        document.getElementById('crosshair').classList.add('locked');
+                        ind.style.borderColor = '#0f0'; 
+                    }
+                } else {
+                    lockTimer = 0; document.getElementById('lock-indicator').style.display = 'none';
+                }
+            }
+        }
+
+        function stopLockingAndFire() {
+            isLocking = false;
+            document.getElementById('crosshair').classList.remove('locking');
+            document.getElementById('crosshair').classList.remove('locked');
+            document.getElementById('lock-indicator').style.display = 'none';
+
+            const mecha = MECHA_DB[currentMechaType];
+            let w2;
+            if (mecha.weapon1 === 'CUSTOM') w2 = customConfig.w2;
+            else w2 = mecha.weapon2;
+
+            if (w2 === "MISSILES" && lockedTarget) fireMissiles(lockedTarget);
+            else if (w2 === "FUNNELS" && lockedTarget) deployFunnels(lockedTarget);
+            else if (w2 === "DUAL_SPEAR") performSpearAttack();
+            
+            lockedTarget = null;
+        }
+
+        function fireMissiles(targetWrapper) {
+            playTone(600, 'triangle', 0.1);
+            for(let i=0; i<4; i++) {
+                const geo = new THREE.CylinderGeometry(0.2, 0.2, 1.5, 8);
+                geo.rotateX(Math.PI/2);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+                const missile = new THREE.Mesh(geo, mat);
+                
+                const startPos = new THREE.Vector3(0, 1.0, 0); 
+                if(missileLauncherMesh) startPos.applyMatrix4(missileLauncherMesh.matrixWorld);
+                else startPos.applyMatrix4(playerGroup.matrixWorld);
+                
+                missile.position.copy(startPos);
+                missile.position.add(new THREE.Vector3((Math.random()-0.5)*2, (Math.random()-0.5)*2, (Math.random()-0.5)*2));
+                
+                scene.add(missile);
+                const initialDir = new THREE.Vector3(0, 1, 0).applyEuler(playerGroup.rotation).normalize(); 
+                initialDir.add(new THREE.Vector3((Math.random()-0.5), (Math.random()-0.5), (Math.random()-0.5))); 
+                
+                missiles.push({
+                    mesh: missile,
+                    target: targetWrapper, 
+                    velocity: initialDir.multiplyScalar(20), 
+                    life: 5.0,
+                    timer: 0 
+                });
+            }
+        }
+
+        function updateMissiles(dt) {
+            missiles.forEach((m, i) => {
+                m.life -= dt; m.timer += dt;
+                
+                if (!m.target || !m.target.mesh || !m.target.mesh.parent) {
+                    m.life = 0; 
+                }
+
+                if (m.life <= 0) {
+                    createExplosion(m.mesh.position, 1); scene.remove(m.mesh); missiles.splice(i, 1); return;
+                }
+
+                const targetPos = m.target.mesh.position.clone();
+                const dirToTarget = new THREE.Vector3().subVectors(targetPos, m.mesh.position).normalize();
+                const steerFactor = m.timer > 0.3 ? 0.15 : 0.02;
+                const desiredVelocity = dirToTarget.multiplyScalar(60.0);
+                const steering = new THREE.Vector3().subVectors(desiredVelocity, m.velocity).multiplyScalar(steerFactor);
+                m.velocity.add(steering);
+                
+                m.mesh.position.add(m.velocity.clone().multiplyScalar(dt));
+                m.mesh.lookAt(m.mesh.position.clone().add(m.velocity));
+
+                createMissileTrail(m.mesh.position);
+
+                const dist = m.mesh.position.distanceTo(targetPos);
+                if (dist < 5) {
+                    hitTarget(m.target, 5); 
+                    createExplosion(m.mesh.position, 2); 
+                    scene.remove(m.mesh); missiles.splice(i, 1); return;
+                }
+                
+                const rayDir = m.velocity.clone().normalize();
+                const rayDist = m.velocity.length() * dt + 2.0;
+                collisionRaycaster.set(m.mesh.position, rayDir);
+                const obsHits = collisionRaycaster.intersectObjects(obstacles);
+                if(obsHits.length > 0 && obsHits[0].distance < rayDist) {
+                    createExplosion(obsHits[0].point, 2);
+                    scene.remove(m.mesh); missiles.splice(i, 1);
+                }
+            });
+        }
+
+        function createMissileTrail(pos) {
+            const p = getParticleFromPool('plane');
+            p.mesh.material.color.setHex(0xaaaaaa);
+            p.mesh.material.opacity = 0.5;
+            p.mesh.position.copy(pos);
+            p.mesh.scale.set(0.5, 0.5, 0.5);
+            p.velocity.set(0,0,0);
+            p.life = 0.3; p.maxLife = 0.3;
+            activeParticles.push(p);
+        }
+
+        function createMassiveExplosion(pos) {
+            const p = getParticleFromPool('sphere');
+            p.mesh.material.color.setHex(0xff5500);
+            p.mesh.material.opacity = 0.9;
+            p.mesh.position.copy(pos);
+            p.mesh.scale.set(15, 15, 15);
+            p.life = 0.8; p.maxLife = 0.8; p.isBlast = true;
+            activeParticles.push(p);
+            for(let i=0; i<30; i++) {
+                const f = getParticleFromPool('box');
+                f.mesh.material.color.setHex(0x333333); 
+                f.mesh.material.opacity = 1.0;
+                f.mesh.position.copy(pos);
+                f.mesh.scale.set(2, 2, 2);
+                f.velocity.set((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60);
+                f.life = 1.5; f.maxLife = 1.5;
+                f.mesh.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+                activeParticles.push(f);
+            }
+            playTone(100, 'lowpass', 0.5);
+        }
+
+        function createExplosion(pos, scale=1) {
+            const p = getParticleFromPool('sphere');
+            p.mesh.material.color.setHex(0xff5500);
+            p.mesh.material.opacity = 0.8;
+            p.mesh.position.copy(pos);
+            p.mesh.scale.set(5*scale, 5*scale, 5*scale);
+            p.life = 0.5; p.maxLife = 0.5; p.isBlast = true;
+            activeParticles.push(p);
+            for(let i=0; i<8; i++) {
+                const f = getParticleFromPool('box');
+                f.mesh.material.color.setHex(0xffaa00);
+                f.mesh.material.opacity = 1.0;
+                f.mesh.position.copy(pos);
+                f.mesh.scale.set(scale, scale, scale);
+                f.velocity.set((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
+                f.life = 0.8; f.maxLife = 0.8;
+                activeParticles.push(f);
+            }
+            playTone(100, 'lowpass', 0.2);
+        }
+
+        function createRedParticles(pos, dir) {
+            const beamLength = 3000;
+            for(let i=0; i<20; i++) {
+                const p = getParticleFromPool('plane');
+                p.mesh.material.color.setHex(0xff0000);
+                p.mesh.material.opacity = 1.0;
+                const dist = Math.random() * beamLength;
+                const spawnPos = pos.clone().add(dir.clone().multiplyScalar(dist));
+                spawnPos.add(new THREE.Vector3((Math.random()-0.5)*4, (Math.random()-0.5)*4, (Math.random()-0.5)*4));
+                p.mesh.position.copy(spawnPos);
+                p.mesh.scale.set(1.5, 1.5, 1.5);
+                p.isBlast = false;
+                p.velocity.set((Math.random()-0.5)*10, (Math.random()-0.5)*10, (Math.random()-0.5)*10);
+                p.life = 0.4; p.maxLife = 0.4;
+                activeParticles.push(p);
+            }
+        }
+
+        function createThrusterParticles(strength, inputMoveVec) {
+            const pack = torsoGroup.getObjectByName("backpack");
+            if(!pack || !pack.userData.thrusterLocs) return;
+            const thrustDir = inputMoveVec.clone().negate().normalize();
+            if(inputMoveVec.lengthSq() < 0.01) {
+                const forward = new THREE.Vector3(0,0,-1).applyEuler(playerGroup.rotation);
+                thrustDir.copy(forward.negate()); 
+            }
+            pack.userData.thrusterLocs.forEach(localPos => {
+                const worldPos = localPos.clone().applyMatrix4(pack.matrixWorld);
+                const count = Math.ceil(strength * 3.2); 
+                for(let i=0; i < count; i++) {
+                    const p = getParticleFromPool('plane');
+                    p.mesh.material.color.setHex(0x00ffff);
+                    p.mesh.material.opacity = 0.8;
+                    p.mesh.position.copy(worldPos);
+                    p.mesh.scale.set(0.1, 0.1, 0.1); 
+                    p.isBlast = false;
+                    p.mesh.position.add(new THREE.Vector3((Math.random()-0.5),(Math.random()-0.5),(Math.random()-0.5)));
+                    const speed = 5.0 + Math.random() * 5.0;
+                    const vel = thrustDir.clone().multiplyScalar(speed);
+                    vel.add(new THREE.Vector3((Math.random()-0.5)*2, (Math.random()-0.5)*2, (Math.random()-0.5)*2));
+                    p.velocity.copy(vel);
+                    p.life = 0.4 + Math.random() * 0.2; p.maxLife = p.life;
+                    activeParticles.push(p);
+                }
+            });
+        }
+
+        function performSpearAttack() {
+            const wave = new THREE.Mesh(new THREE.PlaneGeometry(10, 2), new THREE.MeshBasicMaterial({color:0xaa00ff, side:THREE.DoubleSide, transparent:true, opacity:0.8}));
+            wave.position.copy(playerGroup.position).add(new THREE.Vector3(0, 2, 0));
+            wave.quaternion.copy(playerGroup.quaternion);
+            scene.add(wave);
+            const vel = new THREE.Vector3(0,0,-1).applyQuaternion(playerGroup.quaternion).multiplyScalar(50);
+            bladeWaves.push({ mesh: wave, velocity: vel, life: 1.0 });
+            playTone(300, 'sawtooth', 0.3); 
+        }
+        function deployFunnels(targetWrapper) {
+            for(let i=0; i<5; i++) {
+                const fMesh = createShieldMesh(new THREE.MeshStandardMaterial({color:0xffffff}), new THREE.MeshBasicMaterial({color:0xff0000}));
+                fMesh.position.copy(playerGroup.position).add(new THREE.Vector3(0, 5, 0));
+                scene.add(fMesh);
+                funnels.push({
+                    mesh: fMesh, target: targetWrapper, offset: new THREE.Vector3(Math.cos(i)*10, 5, Math.sin(i)*10), 
+                    timer: 0, life: 8.0, lastFire: 0
+                });
+            }
+            playTone(800, 'sine', 0.2);
+        }
+        function updateFunnels(dt) {
+            funnels.forEach((f, i) => {
+                f.life -= dt; f.timer += dt;
+                if (f.life <= 0 || !f.target || !f.target.mesh || !f.target.mesh.parent) { 
+                    scene.remove(f.mesh); funnels.splice(i, 1); return; 
+                }
+                const idealPos = f.target.mesh.position.clone().add(f.offset);
+                f.offset.applyAxisAngle(new THREE.Vector3(0,1,0), dt * 1.0);
+                f.mesh.position.lerp(idealPos, dt * 2.0);
+                f.mesh.lookAt(f.target.mesh.position);
+                if (f.timer - f.lastFire > 1.0) {
+                    f.lastFire = f.timer;
+                    const targetPos = f.target.mesh.position.clone();
+                    createBeam(f.mesh, new THREE.Vector3(0,0,0.5), 0x00ff00, 0.1, 5, 100, 1, false, targetPos); 
+                    playTone(800, 'square', 0.05);
+                }
+            });
+        }
+        function updateBladeWaves(dt) {
+            bladeWaves.forEach((w, i) => {
+                w.life -= dt; w.mesh.position.add(w.velocity.clone().multiplyScalar(dt));
+                targets.forEach(t => {
+                    if (w.mesh.position.distanceTo(t.mesh.position) < 8) hitTarget(t, 3); 
+                });
+                if (w.life <= 0) { scene.remove(w.mesh); bladeWaves.splice(i, 1); }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            if (gameState === 'HANGAR') {
+                if (playerGroup) playerGroup.rotation.y += dt * 0.5; 
+                renderer.render(scene, camera);
+                return;
+            }
+
+            handleWeapons(dt);
+
+            const moveVec = new THREE.Vector3(
+                moveState.r - moveState.l, 
+                moveState.u - moveState.d, 
+                moveState.b - moveState.f
+            ).normalize();
+            
+            const worldMoveVec = moveVec.clone().applyEuler(playerGroup.rotation);
+
+            if (moveVec.lengthSq() > 0) {
+                const checkDist = PLAYER_RADIUS + worldMoveVec.length() * dt * 60;
+                collisionRaycaster.set(playerGroup.position, worldMoveVec);
+                const hits = collisionRaycaster.intersectObjects(obstacles);
+                
+                if (hits.length > 0 && hits[0].distance < checkDist) {
+                    velocity.set(0,0,0); 
+                } else {
+                    velocity.add(worldMoveVec.multiplyScalar(ACCELERATION * dt * 50));
+                }
+                createThrusterParticles(6, worldMoveVec);
+            } else {
+                createThrusterParticles(1, new THREE.Vector3(0,0,0));
+            }
+
+            velocity.multiplyScalar(0.95); 
+            playerGroup.position.add(velocity.clone().multiplyScalar(dt));
+            document.getElementById('vel-disp').innerText = Math.round(velocity.length());
+
+            const cameraDist = 18;
+            const cameraHeight = 7;
+            const backOffset = new THREE.Vector3(0, cameraHeight, cameraDist);
+            backOffset.applyEuler(playerGroup.rotation);
+            const idealPos = playerGroup.position.clone().add(backOffset);
+            camera.position.lerp(idealPos, 0.5); 
+
+            const forwardVec = new THREE.Vector3(0, 0, -100).applyEuler(playerGroup.rotation);
+            const lookTarget = playerGroup.position.clone().add(forwardVec);
+            lookTarget.add(new THREE.Vector3(0, 5, 0).applyEuler(playerGroup.rotation)); 
+            
+            const playerUp = new THREE.Vector3(0, 1, 0).applyEuler(playerGroup.rotation);
+            camera.up.copy(playerUp);
+            camera.lookAt(lookTarget);
+
+            updateProjectiles(dt);
+            updateParticles(dt);
+
+            renderer.render(scene, camera);
+        }
+
+        function updateProjectiles(dt) {
+            beams.forEach((b, i) => {
+                if (b.isIrradiation) {
+                    b.timer += dt;
+                    const lifeRatio = 1.0 - (b.timer / b.maxTime);
+                    b.group.scale.set(lifeRatio, 1, lifeRatio);
+                    b.outer.material.opacity = lifeRatio * 0.8;
+                    createRedParticles(b.group.position, b.direction);
+
+                    if (b.timer < 0.1) { 
+                        const ray = new THREE.Raycaster(b.group.position, b.direction);
+                        const hits = ray.intersectObjects(targets.map(t=>t.mesh).concat(obstacles)); 
+                        
+                        hits.forEach(hit => {
+                            const wrapper = targets.find(t=>t.mesh === hit.object);
+                            if(wrapper) {
+                                hitTarget(wrapper, 50); 
+                                createMassiveExplosion(hit.point); 
+                            } else {
+                                createMassiveExplosion(hit.point);
+                            }
+                        });
+                    }
+
+                    if (b.timer >= b.maxTime) {
+                        scene.remove(b.group);
+                        beams.splice(i, 1);
+                    }
+                } 
+                else {
+                    b.life -= dt;
+                    b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
+                    const rayDist = b.velocity.length() * dt;
+                    collisionRaycaster.set(b.mesh.position, b.velocity.clone().normalize());
+                    const obsHits = collisionRaycaster.intersectObjects(obstacles);
+                    if (obsHits.length > 0 && obsHits[0].distance < rayDist) {
+                        createExplosion(obsHits[0].point, 0.5);
+                        scene.remove(b.mesh); beams.splice(i, 1); return;
+                    }
+
+                    targets.forEach(t => {
+                        if (b.mesh.position.distanceTo(t.mesh.position) < 5) {
+                            hitTarget(t, b.damage);
+                            b.life = 0; 
+                        }
+                    });
+                    if (b.life <= 0) { scene.remove(b.mesh); beams.splice(i, 1); }
+                }
+            });
+
+            updateMissiles(dt);
+        }
+
+        function updateParticles(dt) {
+            for (let i = activeParticles.length - 1; i >= 0; i--) {
+                const p = activeParticles[i];
+                p.life -= dt;
+                if (p.isBlast) {
+                    p.mesh.scale.multiplyScalar(1.05);
+                    p.mesh.material.opacity = p.life / p.maxLife * 0.8;
+                } else {
+                    p.mesh.position.add(p.velocity.clone().multiplyScalar(dt * 20));
+                    if (p.type === 'plane') p.mesh.scale.multiplyScalar(0.95);
+                    else p.mesh.rotation.x += 0.2;
+                    p.mesh.material.opacity = p.life / p.maxLife;
+                }
+                if (p.life <= 0) {
+                    releaseParticle(p);
+                    activeParticles.splice(i, 1);
+                }
+            }
+        }
+
+        function hitTarget(targetWrapper, damage) {
+            const targetMesh = targetWrapper.mesh;
+            if(!targetMesh) return;
+            targetWrapper.hp -= damage; 
+            targetMesh.material.emissive.setHex(0xffffff);
+            setTimeout(() => { if(targetMesh) targetMesh.material.emissive.setHex(0x330000); }, 50);
+
+            if (targetWrapper.hp <= 0) {
+                createExplosion(targetMesh.position);
+                scene.remove(targetMesh);
+                targets = targets.filter(t => t !== targetWrapper);
+                document.getElementById('target-count').innerText = targets.length;
+                setTimeout(spawnTarget, 2000);
+            }
+        }
+
+        function playTone(freq, type, dur) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + dur);
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
